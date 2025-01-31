@@ -36,6 +36,35 @@
 
 namespace rdscom {
 
+template <typename T>
+class Result {
+   public:
+    static Result<T> ok(T value) { return Result<T>(value); }
+    static Result<T> error() { return Result<T>(true); }
+    static Result<T> error(const char *errorMessage) { return Result<T>(true, errorMessage); }
+
+    Result() : _error(true) {}
+
+    Result<T> operator=(const Result<T> &other) {
+        _value = other._value;
+        _error = other._error;
+        _errorMessage = other._errorMessage;
+        return *this;
+    }
+
+    T value() const { return _value; }
+    bool isError() const { return _error; }
+
+   private:
+    T _value;
+    bool _error;
+    const char *_errorMessage;
+
+    Result(T value) : _value(value), _error(false) {}
+    Result(bool error) : _error(error) {}
+    Result(bool error, const char *errorMessage) : _error(error), _errorMessage(errorMessage) {}
+};
+
 enum DataFieldType {
     INT,
     UINT,
@@ -91,16 +120,21 @@ struct DataField {
     bool operator!=(const DataField &other) const { return !(*this == other); }
 };
 
+/// @brief Reserved identifier prototype for when the identifier is not set
+/// @details This just generally indicates if the prototype is not set
+const std::uint8_t RESERVED_ERROR_PROTOTYPE = 80;
+
 class DataPrototype {
    public:
-    DataPrototype(std::uint8_t packetType) : _packetType(packetType) {}
+    DataPrototype() : _identifier(RESERVED_ERROR_PROTOTYPE) {}
+    DataPrototype(std::uint8_t identifier) : _identifier(identifier) {}
     DataPrototype(const DataPrototype &other)
-        : _packetType(other._packetType),
+        : _identifier(other._identifier),
           _size(other._size),
           _fields(other._fields) {}
 
     DataPrototype(std::vector<std::uint8_t> serialized) {
-        _packetType = static_cast<std::uint8_t>(serialized[0]);
+        _identifier = static_cast<std::uint8_t>(serialized[0]);
         std::size_t index = 1;
         std::size_t numFields = static_cast<std::size_t>(serialized[index]);
         index++;
@@ -120,7 +154,7 @@ class DataPrototype {
     }
 
     DataPrototype &operator=(const DataPrototype &other) {
-        _packetType = other._packetType;
+        _identifier = other._identifier;
         _size = other._size;
         _fields = other._fields;
         return *this;
@@ -136,21 +170,21 @@ class DataPrototype {
         return *this;
     }
 
-    DataField findField(const std::string &name) const {
+    Result<DataField> findField(const std::string &name) const {
         auto it = _fields.find(name);
         if (it == _fields.end()) {
-            return DataField();
+            return Result<DataField>::error("Field not found");
         }
-        return it->second;
+        return Result<DataField>::ok(it->second);
     }
 
     std::size_t size() const { return _size; }
     std::size_t numFields() const { return _fields.size(); }
-    std::uint8_t packetType() const { return _packetType; }
+    std::uint8_t identifier() const { return _identifier; }
 
     std::vector<std::uint8_t> serializeFormat() const {
         std::vector<std::uint8_t> serialized;
-        serialized.push_back(static_cast<std::uint8_t>(_packetType));
+        serialized.push_back(static_cast<std::uint8_t>(_identifier));
         serialized.push_back(static_cast<std::uint8_t>(_fields.size()));
         for (const auto &field : _fields) {
             serialized.push_back(static_cast<std::uint8_t>(field.first.size()));
@@ -161,25 +195,33 @@ class DataPrototype {
     }
 
    private:
-    std::uint8_t _packetType = 0;
+    std::uint8_t _identifier = 0;
     std::size_t _size = 0;
     std::map<std::string, DataField> _fields;  // field name -> field
 };
 
 class DataBuffer {
    public:
+    DataBuffer() : _type(DataPrototype()) {}
+
     DataBuffer(const DataPrototype &type) : _type(type) {
         _data.resize(_type.size());
     }
 
     DataBuffer(const DataBuffer &other) : _type(other._type), _data(other._data) {}
 
-    DataBuffer(const DataPrototype &type, std::vector<std::uint8_t> data)
-        : _type(type), _data(data) {
-        if (_data.size() != _type.size()) {
-            std::cerr << "Data size mismatch" << std::endl;
-            _data.resize(_type.size());
+    static Result<DataBuffer> createFromPrototype(const DataPrototype &type, std::vector<std::uint8_t> data) {
+        if (type.identifier() == RESERVED_ERROR_PROTOTYPE) {
+            return Result<DataBuffer>::error("Invalid prototype");
         }
+
+        if (data.size() != type.size()) {
+            return Result<DataBuffer>::error("Data size mismatch");
+        }
+
+        DataBuffer buffer(type);
+        buffer._data = data;
+        return Result<DataBuffer>::ok(buffer);
     }
 
     DataBuffer &operator=(const DataBuffer &other) {
@@ -189,21 +231,25 @@ class DataBuffer {
     }
 
     template <typename T>
-    T getField(const std::string &name) const {
+    Result<T> getField(const std::string &name) const {
         static_assert(std::is_arithmetic<T>::value, "getField only supports arithmetic types and std::uint8_t");
-
         static_assert(sizeof(T) <= sizeof(int64_t), "getField only supports types up to 64 bits");
 
-        DataField field = _type.findField(name);
+        Result<DataField> fieldRes = _type.findField(name);
+        if (fieldRes.isError()) {
+            return Result<T>::error("Field not found");
+        }
+
+        DataField field = fieldRes.value();
 
         if (sizeof(T) != field.size()) {
             // std::cerr << "Field size mismatch" << std::endl;
-            return T();
+            return Result<T>::error("Field size mismatch");
         }
 
         T value;
         std::memcpy(&value, _data.data() + field.offset, sizeof(T));
-        return value;
+        return Result<T>::ok(value);
     }
 
     template <typename T>
@@ -211,8 +257,13 @@ class DataBuffer {
         static_assert(std::is_arithmetic<T>::value, "setField only supports arithmetic types and std::uint8_t");
         static_assert(sizeof(T) <= sizeof(int64_t), "setField only supports types up to 64 bits");
 
-        DataField field = _type.findField(name);
-
+        Result<DataField> fieldRes = _type.findField(name);
+        if (fieldRes.isError()) {
+            return;
+        }
+        
+        DataField field = fieldRes.value();
+        
         if (sizeof(T) != field.size()) {
             // std::cerr << "Field size mismatch" << std::endl;
             return;
@@ -237,18 +288,26 @@ enum MessageType {
 
 class Message {
    public:
-    Message(MessageType type, const DataBuffer &data)
-        : _type(type), _buffer(data) {}
-
+    Message() : _type(MessageType::REQUEST), _buffer(DataPrototype()) {}
     Message(const Message &other) : _type(other._type), _buffer(other._buffer) {}
-    Message(DataPrototype proto, std::vector<std::uint8_t> serialized) : _buffer(proto) {
-        std::vector<std::uint8_t> data(serialized.begin() + 1, serialized.end());
-        _buffer = DataBuffer(proto, data);
-        _buffer.data() = data;
-    }
+    Message(MessageType type, const DataBuffer &data) : _type(type), _buffer(data) {}
 
-    static Message fromSerialized(DataPrototype proto, std::vector<std::uint8_t> serialized) {
-        return Message(proto, serialized);
+    static Result<Message> fromSerialized(const DataPrototype &proto, const std::vector<std::uint8_t> &serialized) {
+        if (proto.identifier() == RESERVED_ERROR_PROTOTYPE) {
+            return Result<Message>::error("Invalid prototype");
+        }
+
+        if (serialized.size() == 0) {
+            return Result<Message>::error("Empty message");
+        }
+
+        MessageType type = static_cast<MessageType>(serialized[0]);
+        Result<DataBuffer> bufferRes = DataBuffer::createFromPrototype(proto, std::vector<std::uint8_t>(serialized.begin() + 1, serialized.end()));
+        if (bufferRes.isError()) {
+            return Result<Message>::error("Failed to create data buffer");
+        }
+
+        return Result<Message>::ok(Message(type, bufferRes.value()));
     }
 
     MessageType type() const { return _type; }
