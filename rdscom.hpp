@@ -35,6 +35,9 @@
 #include <string>
 #include <vector>
 
+#define RDS_COM_VERSION "0.1.0"
+#define RDS_DEBUG_ENABLED 1
+
 namespace rdscom {
 
 /**========================================================================
@@ -69,6 +72,32 @@ class Result {
     Result(bool error) : _error(error) {}
     Result(bool error, const char *errorMessage) : _error(error), _errorMessage(errorMessage) {}
 };
+
+#ifdef RDS_DEBUG_ENABLED
+#define RDS_COLOR_PURPLE "\033[95m"
+#define RDS_COLOR_RETURN "\033[0m"
+#define RDS_LINE __LINE__
+
+#define RDS_PREFIX RDS_COLOR_PURPLE "[rdscom:" RDS_LINE "] " RDS_COLOR_RETURN
+
+#define RDS_DEBUG_PRINT(fmt, ...) \
+    fprintf(stdout, RDS_PREFIX fmt, ##__VA_ARGS__)
+
+#define RDS_DEBUG_PRINTLN(fmt, ...) \
+    fprintf(stdout, RDS_PREFIX fmt "\n", ##__VA_ARGS__)
+
+#define RDS_DEBUG_PRINT_ERROR(fmt, ...) \
+    fprintf(stderr, RDS_PREFIX fmt, ##__VA_ARGS__)
+
+#define RDS_DEBUG_PRINT_ERRORLN(fmt, ...) \
+    fprintf(stderr, RDS_PREFIX fmt "\n", ##__VA_ARGS__)
+
+#else
+#define RDS_DEBUG_PRINT(fmt, ...)
+#define RDS_DEBUG_PRINTLN(fmt, ...)
+#define RDS_DEBUG_PRINT_ERROR(fmt, ...)
+#define RDS_DEBUG_PRINT_ERRORLN(fmt, ...)
+#endif
 
 /**========================================================================
  *                           DATA FIELDS & PROTOTYPES
@@ -451,7 +480,6 @@ typedef std::map<std::uint8_t, CallBackList> CallBackMap;
 
 class CommunicationInterface {
    public:
-
     CommunicationInterface &addRxCallback(std::uint8_t type, std::function<void(const Message &message)> callback) {
         if (_rxCallbacks.find(type) == _rxCallbacks.end()) {
             _rxCallbacks[type] = CallBackList();
