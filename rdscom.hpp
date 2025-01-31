@@ -36,6 +36,10 @@
 
 namespace rdscom {
 
+/**========================================================================
+ *                           UTILITIES
+ *========================================================================**/
+
 template <typename T>
 class Result {
    public:
@@ -65,6 +69,24 @@ class Result {
     Result(bool error, const char *errorMessage) : _error(error), _errorMessage(errorMessage) {}
 };
 
+/**========================================================================
+ *                           DATA FIELDS & PROTOTYPES
+ *
+ * Data Fields are the building blocks of the Data Prototype. You can think
+ * of a Data Field as a single field in a struct. The Data Prototype is a
+ * collection of Data Fields, and is the blueprint for the Data Buffer.
+ * In this way, a Data Buffer is like an instance of a Data Prototype,
+ * and actually contains data. Data Prototypes just describe the format of
+ * the data.
+ *
+ * This abstraction allows for easy serialization and deserialization of
+ * arbitrary data structures, and is the foundation of the Message class,
+ * which uses a Data Buffer to store data, and send it over a communication
+ * channel.
+ *
+ *========================================================================**/
+
+/// @brief Enum for the different types of data fields
 enum DataFieldType {
     INT,
     UINT,
@@ -75,6 +97,10 @@ enum DataFieldType {
     NONE,
 };
 
+/// @brief DataField class for a single field in a Data Prototype
+/// This is essentially a fat pointer.
+/// It doesn't really make too much sense to use this class
+/// directly, as it is mostly used internally.
 struct DataField {
    public:
     std::size_t offset;
@@ -124,6 +150,8 @@ struct DataField {
 /// @details This just generally indicates if the prototype is not set
 const std::uint8_t RESERVED_ERROR_PROTOTYPE = 80;
 
+/// @brief DataPrototype class for a collection of DataFields
+/// And describes the format of a DataBuffer
 class DataPrototype {
    public:
     DataPrototype() : _identifier(RESERVED_ERROR_PROTOTYPE) {}
@@ -200,6 +228,9 @@ class DataPrototype {
     std::map<std::string, DataField> _fields;  // field name -> field
 };
 
+/// @brief DataBuffer is an instance of a DataPrototype
+/// and uses the DataPrototype to describe the format of the data
+/// it contains.
 class DataBuffer {
    public:
     DataBuffer() : _type(DataPrototype()) {}
@@ -261,9 +292,9 @@ class DataBuffer {
         if (fieldRes.isError()) {
             return;
         }
-        
+
         DataField field = fieldRes.value();
-        
+
         if (sizeof(T) != field.size()) {
             // std::cerr << "Field size mismatch" << std::endl;
             return;
@@ -279,6 +310,16 @@ class DataBuffer {
     DataPrototype _type;
     std::vector<std::uint8_t> _data;
 };
+
+/**========================================================================
+ *                           MESSAGES
+ *
+ * The Message class is a wrapper around a DataBuffer, and adds a type
+ * to the message, which can be REQUEST, RESPONSE, or ERROR. This allows
+ * for easy communication between embedded systems, and is the foundation
+ * of the communication library.
+ *
+ *========================================================================**/
 
 enum MessageType {
     REQUEST,
@@ -312,6 +353,16 @@ class Message {
 
     MessageType type() const { return _type; }
     DataBuffer &data() { return _buffer; }
+
+    template <typename T>
+    Result<T> getField(const std::string &name) const {
+        return _buffer.getField<T>(name);
+    }
+
+    template <typename T>
+    void setField(const std::string &name, T value) {
+        _buffer.setField(name, value);
+    }
 
     std::vector<std::uint8_t> serialize() const {
         std::vector<std::uint8_t> serialized;
