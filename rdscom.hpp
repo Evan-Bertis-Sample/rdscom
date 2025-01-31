@@ -30,6 +30,9 @@
 #include <iostream>
 #include <vector>
 #include <cstddef>
+#include <memory>
+#include <cstring>
+#include <cstdint>
 
 namespace rdscom {
 
@@ -65,7 +68,7 @@ struct DataField {
             case DataFieldType::DOUBLE:
                 return sizeof(double);
             case DataFieldType::BYTE:
-                return sizeof(std::byte);
+                return sizeof(std::uint8_t);
             case DataFieldType::BOOL:
                 return sizeof(bool);
             case DataFieldType::NONE:
@@ -96,7 +99,7 @@ class DataPrototype {
           _size(other._size),
           _fields(other._fields) {}
 
-    DataPrototype(std::vector<std::byte> serialized) {
+    DataPrototype(std::vector<std::uint8_t> serialized) {
         _packetType = static_cast<std::uint8_t>(serialized[0]);
         std::size_t index = 1;
         std::size_t numFields = static_cast<std::size_t>(serialized[index]);
@@ -116,7 +119,7 @@ class DataPrototype {
         }
     }
 
-    static DataPrototype fromSerialized(std::vector<std::byte> serialized) {
+    static DataPrototype fromSerialized(std::vector<std::uint8_t> serialized) {
         return DataPrototype(serialized);
     }
 
@@ -138,14 +141,14 @@ class DataPrototype {
     std::size_t numFields() const { return _fields.size(); }
     std::uint8_t packetType() const { return _packetType; }
 
-    std::vector<std::byte> serializeFormat() const {
-        std::vector<std::byte> serialized;
-        serialized.push_back(static_cast<std::byte>(_packetType));
-        serialized.push_back(static_cast<std::byte>(_fields.size()));
+    std::vector<std::uint8_t> serializeFormat() const {
+        std::vector<std::uint8_t> serialized;
+        serialized.push_back(static_cast<std::uint8_t>(_packetType));
+        serialized.push_back(static_cast<std::uint8_t>(_fields.size()));
         for (const auto &field : _fields) {
-            serialized.push_back(static_cast<std::byte>(field.first.size()));
+            serialized.push_back(static_cast<std::uint8_t>(field.first.size()));
             serialized.insert(serialized.end(), field.first.begin(), field.first.end());
-            serialized.push_back(static_cast<std::byte>(field.second.type));
+            serialized.push_back(static_cast<std::uint8_t>(field.second.type));
         }
         return serialized;
     }
@@ -172,8 +175,7 @@ class DataBuffer {
 
     template <typename T>
     T getField(const std::string &name) const {
-        static_assert(std::is_arithmetic<T>::value || std::is_same<T, std::byte>::value,
-                      "getField only supports arithmetic types and std::byte");
+        static_assert(std::is_arithmetic<T>::value, "getField only supports arithmetic types and std::uint8_t");
 
         static_assert(sizeof(T) <= sizeof(int64_t), "getField only supports types up to 64 bits");
 
@@ -185,33 +187,31 @@ class DataBuffer {
         }
 
         T value;
-        std::memcpy(&value, _data.data() + it->second.offset, sizeof(T));
+        std::memcpy(&value, _data.data() + field.offset, sizeof(T));
         return value;
     }
 
     template <typename T>
     void setField(const std::string &name, T value) {
-        static_assert(std::is_arithmetic<T>::value || std::is_same<T, std::byte>::value,
-                      "setField only supports arithmetic types and std::byte");
-
+        static_assert(std::is_arithmetic<T>::value, "setField only supports arithmetic types and std::uint8_t");
         static_assert(sizeof(T) <= sizeof(int64_t), "setField only supports types up to 64 bits");
 
         DataField field = _type.findField(name);
 
         if (sizeof(T) != field.size()) {
-            std::
+            std::cerr << "Field size mismatch" << std::endl;
             return;
         }
 
         std::memcpy(_data.data() + field.offset, &value, sizeof(T));
     }
 
-    std::vector<std::byte> data() const { return _data; }
+    std::vector<std::uint8_t> data() const { return _data; }
     std::size_t size() const { return _data.size(); }
 
    private:
     DataPrototype _type;
-    std::vector<std::byte> _data;
+    std::vector<std::uint8_t> _data;
 };
 
 enum MessageType {
@@ -226,24 +226,24 @@ class Message {
         : _type(type), _buffer(data) {}
 
     Message(const Message &other) : _type(other._type), _buffer(other._buffer) {}
-    Message(std::vector<std::byte> serialized) {
+    Message(std::vector<std::uint8_t> serialized) : _buffer(DataPrototype(0)) {
         _type = static_cast<MessageType>(serialized[0]);
-        std::vector<std::byte> data(serialized.begin() + 1, serialized.end());
+        std::vector<std::uint8_t> data(serialized.begin() + 1, serialized.end());
         _buffer = DataBuffer(DataPrototype(data));
         _buffer.data() = data;
     }
 
-    static Message fromSerialized(std::vector<std::byte> serialized) {
+    static Message fromSerialized(std::vector<std::uint8_t> serialized) {
         return Message(serialized);
     }
 
     MessageType type() const { return _type; }
     DataBuffer &data() { return _buffer; }
 
-    std::vector<std::byte> serialize() const {
-        std::vector<std::byte> serialized;
-        serialized.push_back(static_cast<std::byte>(_type));
-        std::vector<std::byte> data = _buffer.data();
+    std::vector<std::uint8_t> serialize() const {
+        std::vector<std::uint8_t> serialized;
+        serialized.push_back(static_cast<std::uint8_t>(_type));
+        std::vector<std::uint8_t> data = _buffer.data();
         serialized.insert(serialized.end(), data.begin(), data.end());
         return serialized;
     }

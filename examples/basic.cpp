@@ -1,4 +1,6 @@
 #include <stdio.h>
+#include <vector>
+#include <cstddef>
 
 #include "rdscom.hpp"
 
@@ -10,14 +12,14 @@ int main() {
 
     rdscom::DataBuffer buffer(type);
     buffer.setField<int>("id", 1);
-    buffer.setField<std::byte>("name", std::byte('A'));
+    buffer.setField<std::uint8_t>("name", std::uint8_t('A'));
     buffer.setField<std::uint8_t>("age", 20);
 
     rdscom::Message message(rdscom::MessageType::REQUEST, buffer);
-    std::vector<std::byte> serialized = message.serialize();
+    std::vector<std::uint8_t> serialized = message.serialize();
 
     printf("Serialized message: ");
-    for (std::byte byte : serialized) {
+    for (std::uint8_t byte : serialized) {
         printf("%c", static_cast<char>(byte));
     }
     printf("\n");
@@ -26,7 +28,7 @@ int main() {
     printf("Deserialized message type: %d\n", deserialized.type());
     printf("Deserialized message data:\n");
     printf("id: %d\n", deserialized.data().getField<int>("id"));
-    printf("name: %c\n", static_cast<char>(deserialized.data().getField<std::byte>("name")));
+    printf("name: %c\n", static_cast<char>(deserialized.data().getField<std::uint8_t>("name")));
     printf("age: %u\n", deserialized.data().getField<std::uint8_t>("age"));
 
     return 0;
