@@ -29,7 +29,7 @@ int main() {
     }
     printf("\n");
 
-    rdscom::Message deserialized = rdscom::Message::fromSerialized(serialized);
+    rdscom::Message deserialized = rdscom::Message::fromSerialized(type, serialized);
     printf("Deserialized message type: %d\n", deserialized.type());
     printf("Deserialized message data:\n");
     printf("id: %d\n", deserialized.data().getField<int>("id"));

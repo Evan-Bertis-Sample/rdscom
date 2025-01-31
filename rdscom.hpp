@@ -25,14 +25,14 @@
  *
  *========================================================================**/
 
-#include <map>
-#include <string>
-#include <iostream>
-#include <vector>
 #include <cstddef>
-#include <memory>
-#include <cstring>
 #include <cstdint>
+#include <cstring>
+#include <iostream>
+#include <map>
+#include <memory>
+#include <string>
+#include <vector>
 
 namespace rdscom {
 
@@ -174,6 +174,14 @@ class DataBuffer {
 
     DataBuffer(const DataBuffer &other) : _type(other._type), _data(other._data) {}
 
+    DataBuffer(const DataPrototype &type, std::vector<std::uint8_t> data)
+        : _type(type), _data(data) {
+        if (_data.size() != _type.size()) {
+            std::cerr << "Data size mismatch" << std::endl;
+            _data.resize(_type.size());
+        }
+    }
+
     DataBuffer &operator=(const DataBuffer &other) {
         _type = other._type;
         _data = other._data;
@@ -233,15 +241,14 @@ class Message {
         : _type(type), _buffer(data) {}
 
     Message(const Message &other) : _type(other._type), _buffer(other._buffer) {}
-    Message(std::vector<std::uint8_t> serialized) : _buffer(DataPrototype(0)) {
-        _type = static_cast<MessageType>(serialized[0]);
+    Message(DataPrototype proto, std::vector<std::uint8_t> serialized) : _buffer(proto) {
         std::vector<std::uint8_t> data(serialized.begin() + 1, serialized.end());
-        _buffer = DataBuffer(DataPrototype(data));
+        _buffer = DataBuffer(proto, data);
         _buffer.data() = data;
     }
 
-    static Message fromSerialized(std::vector<std::uint8_t> serialized) {
-        return Message(serialized);
+    static Message fromSerialized(DataPrototype proto, std::vector<std::uint8_t> serialized) {
+        return Message(proto, serialized);
     }
 
     MessageType type() const { return _type; }
