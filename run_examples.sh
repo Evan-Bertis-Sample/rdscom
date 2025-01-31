@@ -11,6 +11,18 @@ for exe in "${exes[@]}"; do
     ((i++))
 done
 
+# if there are no executables, exit
+if [[ ${#exes[@]} -eq 0 ]]; then
+    echo "No executables found."
+    exit 1
+fi
+
+# if there is only one executable, run it
+if [[ ${#exes[@]} -eq 1 ]]; then
+    "${exes[0]}"
+    exit 0
+fi
+
 # Get user's choice
 read -p "Enter a number: " choice
 

@@ -15,6 +15,11 @@ int main() {
     buffer.setField<std::uint8_t>("name", std::uint8_t('A'));
     buffer.setField<std::uint8_t>("age", 20);
 
+    // get the fields
+    printf("id: %d\n", buffer.getField<int>("id"));
+    printf("name: %c\n", static_cast<char>(buffer.getField<std::uint8_t>("name")));
+    printf("age: %u\n", buffer.getField<std::uint8_t>("age"));
+
     rdscom::Message message(rdscom::MessageType::REQUEST, buffer);
     std::vector<std::uint8_t> serialized = message.serialize();
 

@@ -119,6 +119,13 @@ class DataPrototype {
         }
     }
 
+    DataPrototype &operator=(const DataPrototype &other) {
+        _packetType = other._packetType;
+        _size = other._size;
+        _fields = other._fields;
+        return *this;
+    }
+
     static DataPrototype fromSerialized(std::vector<std::uint8_t> serialized) {
         return DataPrototype(serialized);
     }
@@ -182,7 +189,7 @@ class DataBuffer {
         DataField field = _type.findField(name);
 
         if (sizeof(T) != field.size()) {
-            std::cerr << "Field size mismatch" << std::endl;
+            // std::cerr << "Field size mismatch" << std::endl;
             return T();
         }
 
@@ -199,7 +206,7 @@ class DataBuffer {
         DataField field = _type.findField(name);
 
         if (sizeof(T) != field.size()) {
-            std::cerr << "Field size mismatch" << std::endl;
+            // std::cerr << "Field size mismatch" << std::endl;
             return;
         }
 
