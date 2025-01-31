@@ -28,6 +28,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <functional>
 #include <iostream>
 #include <map>
 #include <memory>
@@ -376,6 +377,104 @@ class Message {
     MessageType _type;
     DataBuffer _buffer;
 };
+
+/**========================================================================
+ *                       COMMUNICATION CHANNELS
+ *
+ * Communication channels are the way that messages are sent and received.BOOL
+ * This is just an abstract class, and is meant to be implemented by the
+ * user. The user can implement a communication channel for UART, SPI, I2C,
+ * or any other communication protocol.
+ *
+ *========================================================================**/
+
+class CommunicationChannel {
+   public:
+    virtual std::vector<std::uint8_t> receive() = 0;
+    virtual void send(const Message &message) = 0;
+};
+
+class TestLossyChannel : public CommunicationChannel {
+   public:
+    TestLossyChannel() : _lossRate(0) {
+        TestLossyChannel other = TestLossyChannel(0, *this);
+        _other = other;
+    }
+
+    TestLossyChannel operator=(const TestLossyChannel &other) {
+        _lossRate = other._lossRate;
+        _other = other._other;
+        return *this;
+    }
+
+    TestLossyChannel(double lossRate, TestLossyChannel &other) : _lossRate(lossRate), _other(other) {};
+
+    operator CommunicationChannel &() { return *this; }
+
+    std::vector<std::uint8_t> receive() {
+        std::vector<std::uint8_t> received;
+        for (std::uint8_t byte : _rxBuffer) {
+            if (rand() % 100 < _lossRate * 100) {
+                continue;
+            }
+            received.push_back(byte);
+        }
+        return received;
+    }
+
+    void send(const Message &message) {
+        std::vector<std::uint8_t> serialized = message.serialize();
+        _other._rxBuffer = serialized;
+    }
+
+   private:
+    double _lossRate;
+    TestLossyChannel &_other;
+    std::vector<std::uint8_t> _rxBuffer;
+};
+
+/**========================================================================
+ *                           COMMUNICATION
+ *
+ * This is the main class that the user will interact with. It utilizes a
+ * communication channel, but performs additional logic on top of it to
+ * guarantee that messages are sent and received correctly. This is
+ * an implementation of TCP-like communication, but is much simpler.
+ *
+ * It also adds the ability to add callbacks to messages, which can be
+ * used to handle messages of a certain type.
+ *
+ *========================================================================**/
+
+typedef std::vector<std::function<void(const Message &message)>> CallBackList;
+typedef std::map<std::uint8_t, CallBackList> CallBackMap;
+
+class CommunicationInterface {
+   public:
+
+    CommunicationInterface &addRxCallback(std::uint8_t type, std::function<void(const Message &message)> callback) {
+        if (_rxCallbacks.find(type) == _rxCallbacks.end()) {
+            _rxCallbacks[type] = CallBackList();
+        }
+
+        _rxCallbacks[type].push_back(callback);
+        return *this;
+    }
+
+    CommunicationInterface &addTxCallback(std::uint8_t type, std::function<void(const Message &message)> callback) {
+        if (_txCallbacks.find(type) == _txCallbacks.end()) {
+            _txCallbacks[type] = CallBackList();
+        }
+
+        _txCallbacks[type].push_back(callback);
+        return *this;
+    }
+
+   private:
+    CommunicationChannel &_channel;
+    CallBackMap _rxCallbacks;
+    CallBackMap _txCallbacks;
+}
 
 }  // namespace rdscom
 
