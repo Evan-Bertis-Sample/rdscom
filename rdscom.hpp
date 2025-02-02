@@ -35,8 +35,8 @@
 #include <string>
 #include <vector>
 
-#define RDS_COM_VERSION "0.1.0"
-#define RDS_DEBUG_ENABLED 1
+#define RDSCOM_VERSION "0.1.0"
+#define RDSCOM_DEBUG_ENABLED 1
 
 namespace rdscom {
 
@@ -73,30 +73,30 @@ class Result {
     Result(bool error, const char *errorMessage) : _error(error), _errorMessage(errorMessage) {}
 };
 
-#ifdef RDS_DEBUG_ENABLED
-#define RDS_COLOR_PURPLE "\033[95m"
-#define RDS_COLOR_RETURN "\033[0m"
-#define RDS_LINE __LINE__
+#ifdef RDSCOM_DEBUG_ENABLED
+#define RDSCOM_COLOR_PURPLE "\033[95m"
+#define RDSCOM_COLOR_RETURN "\033[0m"
+#define RDSCOM_LINE __LINE__
 
-#define RDS_PREFIX RDS_COLOR_PURPLE "[rdscom:" RDS_LINE "] " RDS_COLOR_RETURN
+#define RDSCOM_PREFIX RDSCOM_COLOR_PURPLE "[rdscom:" RDSCOM_LINE "] " RDSCOM_COLOR_RETURN
 
-#define RDS_DEBUG_PRINT(fmt, ...) \
-    fprintf(stdout, RDS_PREFIX fmt, ##__VA_ARGS__)
+#define RDSCOM_DEBUG_PRINT(fmt, ...) \
+    fprintf(stdout, RDSCOM_PREFIX fmt, ##__VA_ARGS__)
 
-#define RDS_DEBUG_PRINTLN(fmt, ...) \
-    fprintf(stdout, RDS_PREFIX fmt "\n", ##__VA_ARGS__)
+#define RDSCOM_DEBUG_PRINTLN(fmt, ...) \
+    fprintf(stdout, RDSCOM_PREFIX fmt "\n", ##__VA_ARGS__)
 
-#define RDS_DEBUG_PRINT_ERROR(fmt, ...) \
-    fprintf(stderr, RDS_PREFIX fmt, ##__VA_ARGS__)
+#define RDSCOM_DEBUG_PRINT_ERROR(fmt, ...) \
+    fprintf(stderr, RDSCOM_PREFIX fmt, ##__VA_ARGS__)
 
-#define RDS_DEBUG_PRINT_ERRORLN(fmt, ...) \
-    fprintf(stderr, RDS_PREFIX fmt "\n", ##__VA_ARGS__)
+#define RDSCOM_DEBUG_PRINT_ERRORLN(fmt, ...) \
+    fprintf(stderr, RDSCOM_PREFIX fmt "\n", ##__VA_ARGS__)
 
 #else
-#define RDS_DEBUG_PRINT(fmt, ...)
-#define RDS_DEBUG_PRINTLN(fmt, ...)
-#define RDS_DEBUG_PRINT_ERROR(fmt, ...)
-#define RDS_DEBUG_PRINT_ERRORLN(fmt, ...)
+#define RDSCOM_DEBUG_PRINT(fmt, ...)
+#define RDSCOM_DEBUG_PRINTLN(fmt, ...)
+#define RDSCOM_DEBUG_PRINT_ERROR(fmt, ...)
+#define RDSCOM_DEBUG_PRINT_ERRORLN(fmt, ...)
 #endif
 
 /**========================================================================
@@ -417,50 +417,81 @@ class Message {
  *
  *========================================================================**/
 
+
 class CommunicationChannel {
    public:
+    CommunicationChannel() {}
     virtual std::vector<std::uint8_t> receive() = 0;
     virtual void send(const Message &message) = 0;
 };
 
-class TestLossyChannel : public CommunicationChannel {
+#ifdef RDSCOM_ARDUINO // Arduino specific code
+#include <Arduino.h>
+
+class SerialCommunicationChannel : public CommunicationChannel {
    public:
-    TestLossyChannel() : _lossRate(0) {
-        TestLossyChannel other = TestLossyChannel(0, *this);
-        _other = other;
-    }
+    SerialCommunicationChannel(HardwareSerial &serial) : _serial(serial) {}
 
-    TestLossyChannel operator=(const TestLossyChannel &other) {
-        _lossRate = other._lossRate;
-        _other = other._other;
-        return *this;
-    }
-
-    TestLossyChannel(double lossRate, TestLossyChannel &other) : _lossRate(lossRate), _other(other) {};
-
-    operator CommunicationChannel &() { return *this; }
-
-    std::vector<std::uint8_t> receive() {
-        std::vector<std::uint8_t> received;
-        for (std::uint8_t byte : _rxBuffer) {
-            if (rand() % 100 < _lossRate * 100) {
-                continue;
-            }
-            received.push_back(byte);
+    std::vector<std::uint8_t> receive() override {
+        std::vector<std::uint8_t> data;
+        while (_serial.available()) {
+            data.push_back(static_cast<std::uint8_t>(_serial.read()));
         }
-        return received;
+        return data;
     }
 
-    void send(const Message &message) {
+    void send(const Message &message) override {
         std::vector<std::uint8_t> serialized = message.serialize();
-        _other._rxBuffer = serialized;
+        for (std::uint8_t byte : serialized) {
+            _serial.write(byte);
+        }
     }
 
    private:
-    double _lossRate;
-    TestLossyChannel &_other;
-    std::vector<std::uint8_t> _rxBuffer;
+    HardwareSerial &_serial;
 };
+
+#endif
+
+#ifdef RDSCOM_WINDOWS // Windows specific code for listening to a uart port
+#include <windows.h>
+
+class WindowsUARTCommunicationChannel : public CommunicationChannel {
+   public:
+    WindowsUARTCommunicationChannel(const char *portName) : _portName(portName) {
+        _handle = CreateFileA(portName, GENERIC_READ | GENERIC_WRITE, 0, NULL, OPEN_EXISTING, 0, NULL);
+        if (_handle == INVALID_HANDLE_VALUE) {
+            RDSCOM_DEBUG_PRINT_ERRORLN("Failed to open port %s", portName);
+        }
+    }
+
+    ~WindowsUARTCommunicationChannel() {
+        CloseHandle(_handle);
+    }
+
+    std::vector<std::uint8_t> receive() override {
+        std::vector<std::uint8_t> data;
+        DWORD bytesRead;
+        if (ReadFile(_handle, _buffer, 1, &bytesRead, NULL)) {
+            data.push_back(_buffer[0]);
+        }
+        return data;
+    }
+
+    void send(const Message &message) override {
+        std::vector<std::uint8_t> serialized = message.serialize();
+        for (std::uint8_t byte : serialized) {
+            WriteFile(_handle, &byte, 1, NULL, NULL);
+        }
+    }
+
+   private:
+    const char *_portName;
+    HANDLE _handle;
+    char _buffer[1];
+};
+
+#endif
 
 /**========================================================================
  *                           COMMUNICATION
@@ -502,7 +533,7 @@ class CommunicationInterface {
     CommunicationChannel &_channel;
     CallBackMap _rxCallbacks;
     CallBackMap _txCallbacks;
-}
+};
 
 }  // namespace rdscom
 

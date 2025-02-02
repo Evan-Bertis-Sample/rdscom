@@ -2,7 +2,9 @@
 #include <vector>
 #include <cstddef>
 
+#define RDSCOM_WINDOWS
 #include "rdscom.hpp"
+
 
 int main() {
     rdscom::DataPrototype type(0);
