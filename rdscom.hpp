@@ -463,6 +463,35 @@ class Message {
         return serialized;
     }
 
+    void printClean(std::ostream &output) const {
+        std::vector<std::uint8_t> serialized = serialize();
+        output << "Message: \n";
+        output << "  Preamble: ";
+        for (std::size_t i = 0; i < _preambleSize; i++) {
+            output << static_cast<char>(serialized[i]);
+        }
+        output << "\n";
+        output << "  Header: ";
+        output << "    ";
+        for (std::size_t i = 0; i < _completeHeaderSize; i++) {
+            output << static_cast<char>(serialized[i + _preambleSize]);
+        }
+        output << "\n";
+
+        output << "  Data: ";
+        for (std::size_t i = 0; i < _buffer.size(); i++) {
+            output << static_cast<char>(serialized[i + _completeHeaderSize]);
+        }
+        output << "\n";
+
+        output << "  End Sequence: ";
+        for (std::size_t i = 0; i < _endSequenceSize; i++) {
+            output << static_cast<char>(serialized[i + _completeHeaderSize + _buffer.size()]);
+        }
+        output << "\n";
+
+    }
+
    private:
     MessageHeader _header;
     DataBuffer _buffer;

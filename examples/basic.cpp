@@ -25,11 +25,7 @@ int main() {
     rdscom::Message message(rdscom::MessageType::REQUEST, buffer);
     std::vector<std::uint8_t> serialized = message.serialize();
 
-    printf("Serialized message: ");
-    for (std::uint8_t byte : serialized) {
-        printf("%c", static_cast<char>(byte));
-    }
-    printf("\n");
+    message.printClean(std::cout);;
 
     rdscom::Message deserialized = rdscom::Message::fromSerialized(type, serialized).value();
     printf("Deserialized message type: %d\n", deserialized.type());
