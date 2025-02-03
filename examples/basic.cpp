@@ -20,9 +20,10 @@ int main() {
             printf("Error: %s\n", error);
             return 1;
         },
-        buffer.setField<int>("id", 1);
-        buffer.setField<std::uint8_t>("name", std::uint8_t('A'));
-        buffer.setField<std::uint8_t>("age", 20);
+        buffer.setField<int>("id", 1),
+        buffer.setField<std::uint8_t>("name", std::uint8_t('A')),
+        buffer.setField<std::uint8_t>("age", 20),
+        buffer.setField<std::uint8_t>("pain", 20)
     );
 
 

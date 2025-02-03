@@ -34,6 +34,10 @@
 #include <memory>
 #include <string>
 #include <vector>
+#include <iostream>
+#include <string>
+#include <tuple>
+#include <utility>
 
 #define RDSCOM_VERSION "0.1.0"
 #define RDSCOM_DEBUG_ENABLED 1
@@ -72,47 +76,6 @@ class Result {
     Result(T value) : _value(value), _error(false) {}
     Result(bool error) : _error(error) {}
     Result(bool error, const char *errorMessage) : _error(error), _errorMessage(errorMessage) {}
-};
-
-#include <iostream>
-#include <string>
-#include <tuple>
-#include <utility>
-
-// ---------------------
-// Your Result class
-// ---------------------
-template <typename T>
-class Result {
-   public:
-    static Result<T> ok(T value) { return Result<T>(value); }
-    static Result<T> errorResult() { return Result<T>(true); }
-    static Result<T> errorResult(const char *errorMessage) { return Result<T>(true, errorMessage); }
-
-    Result() : _error(true), _errorMessage("") {}
-
-    // Note: a better signature would be `Result& operator=(const Result& other)`,
-    // and return a reference to `*this`. But for demonstration:
-    Result<T> operator=(const Result<T> &other) {
-        _value = other._value;
-        _error = other._error;
-        _errorMessage = other._errorMessage;
-        return *this;
-    }
-
-    T value() const { return _value; }
-    bool isError() const { return _error; }
-    const char *error() const { return _errorMessage; }
-
-   private:
-    T _value{};
-    bool _error;
-    const char *_errorMessage;
-
-    Result(T value) : _value(value), _error(false), _errorMessage("") {}
-    Result(bool error) : _value{}, _error(error), _errorMessage("") {}
-    Result(bool error, const char *errorMessage)
-        : _value{}, _error(error), _errorMessage(errorMessage) {}
 };
 
 template <typename OnError, typename... Fs>
