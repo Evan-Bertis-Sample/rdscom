@@ -14,9 +14,18 @@ int main() {
     type.addField("age", rdscom::DataFieldType::UINT8);
 
     rdscom::DataBuffer buffer(type);
-    buffer.setField<int>("id", 1);
-    buffer.setField<std::uint8_t>("name", std::uint8_t('A'));
-    buffer.setField<std::uint8_t>("age", 20);
+
+    rdscom::check(
+        [](const char *error) {
+            printf("Error: %s\n", error);
+            return 1;
+        },
+        buffer.setField<int>("id", 1);
+        buffer.setField<std::uint8_t>("name", std::uint8_t('A'));
+        buffer.setField<std::uint8_t>("age", 20);
+    );
+
+
 
     // get the fields
     printf("id: %d\n", buffer.getField<int>("id").value());
@@ -24,6 +33,9 @@ int main() {
     printf("age: %u\n", buffer.getField<std::uint8_t>("age").value());
 
     rdscom::Message message(rdscom::MessageType::REQUEST, buffer);
+
+    message.setField<int>("id", 1);
+
     std::vector<std::uint8_t> serialized = message.serialize();
 
     message.printClean(std::cout);;

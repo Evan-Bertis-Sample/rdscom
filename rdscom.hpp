@@ -74,6 +74,70 @@ class Result {
     Result(bool error, const char *errorMessage) : _error(error), _errorMessage(errorMessage) {}
 };
 
+#include <iostream>
+#include <string>
+#include <tuple>
+#include <utility>
+
+// ---------------------
+// Your Result class
+// ---------------------
+template <typename T>
+class Result {
+   public:
+    static Result<T> ok(T value) { return Result<T>(value); }
+    static Result<T> errorResult() { return Result<T>(true); }
+    static Result<T> errorResult(const char *errorMessage) { return Result<T>(true, errorMessage); }
+
+    Result() : _error(true), _errorMessage("") {}
+
+    // Note: a better signature would be `Result& operator=(const Result& other)`,
+    // and return a reference to `*this`. But for demonstration:
+    Result<T> operator=(const Result<T> &other) {
+        _value = other._value;
+        _error = other._error;
+        _errorMessage = other._errorMessage;
+        return *this;
+    }
+
+    T value() const { return _value; }
+    bool isError() const { return _error; }
+    const char *error() const { return _errorMessage; }
+
+   private:
+    T _value{};
+    bool _error;
+    const char *_errorMessage;
+
+    Result(T value) : _value(value), _error(false), _errorMessage("") {}
+    Result(bool error) : _value{}, _error(error), _errorMessage("") {}
+    Result(bool error, const char *errorMessage)
+        : _value{}, _error(error), _errorMessage(errorMessage) {}
+};
+
+template <typename OnError, typename... Fs>
+void check(OnError onError, Fs &&...functions) {
+    // Call all the functions (each returning a Result<...>) and store them in a tuple
+    auto results = std::make_tuple(functions()...);
+
+    // We’ll scan through all results. If any is error, we call onError.
+    bool foundError = false;
+    const char *errorMsg = "";
+
+    // "std::apply" applies a lambda to each element of the tuple
+    std::apply(
+        [&](auto &&...r) {
+            // Fold expression to check each result
+            ((r.isError() ? (foundError = true, errorMsg = r.error()) : void()), ...);
+        },
+        results);
+
+    if (foundError) {
+        // If any error found, call onError
+        onError(errorMsg);
+    }
+}
+
 #ifdef RDSCOM_DEBUG_ENABLED
 #define RDSCOM_COLOR_PURPLE "\033[95m"
 #define RDSCOM_COLOR_RETURN "\033[0m"
@@ -120,9 +184,19 @@ class Result {
 
 /// @brief Enum for the different types of data fields
 enum DataFieldType {
-    UINT8, UINT16, UINT32, UINT64,
-    INT8, INT16, INT32, INT64,
-    FLOAT, DOUBLE, BOOL, BYTE, NONE
+    UINT8,
+    UINT16,
+    UINT32,
+    UINT64,
+    INT8,
+    INT16,
+    INT32,
+    INT64,
+    FLOAT,
+    DOUBLE,
+    BOOL,
+    BYTE,
+    NONE
 };
 
 /// @brief DataField class for a single field in a Data Prototype
@@ -310,23 +384,24 @@ class DataBuffer {
     }
 
     template <typename T>
-    void setField(const std::string &name, T value) {
+    Result<T> setField(const std::string &name, T value) {
         static_assert(std::is_arithmetic<T>::value, "setField only supports arithmetic types and std::uint8_t");
         static_assert(sizeof(T) <= sizeof(int64_t), "setField only supports types up to 64 bits");
 
         Result<DataField> fieldRes = _type.findField(name);
         if (fieldRes.isError()) {
-            return;
+            return Result<T>::errorResult("Field not found");
         }
 
         DataField field = fieldRes.value();
 
         if (sizeof(T) != field.size()) {
             // std::cerr << "Field size mismatch" << std::endl;
-            return;
+            return Result<T>::errorResult("Field size mismatch");
         }
 
         std::memcpy(_data.data() + field.offset, &value, sizeof(T));
+        return Result<T>::ok(value);
     }
 
     std::vector<std::uint8_t> data() const { return _data; }
@@ -424,8 +499,8 @@ class Message {
         MessageHeader header = headerRes.value();
 
         Result<DataBuffer> bufferRes = DataBuffer::createFromPrototype(proto, std::vector<std::uint8_t>(
-            serialized.begin() + 1, 
-            serialized.end() - Message::_endSequenceSize));
+                                                                                  serialized.begin() + 1,
+                                                                                  serialized.end() - Message::_endSequenceSize));
 
         if (bufferRes.isError()) {
             return Result<Message>::errorResult("Failed to create data buffer");
@@ -450,8 +525,8 @@ class Message {
     }
 
     template <typename T>
-    void setField(const std::string &name, T value) {
-        _buffer.setField(name, value);
+    Result<T> setField(const std::string &name, T value) {
+        return _buffer.setField(name, value);
     }
 
     std::vector<std::uint8_t> serialize() const {
@@ -490,7 +565,6 @@ class Message {
             output << static_cast<char>(serialized[i + _completeHeaderSize + _buffer.size()]);
         }
         output << "\n";
-
     }
 
    private:
@@ -506,7 +580,6 @@ class Message {
     static std::size_t _completeEndSequenceSize;
 };
 
-
 std::uint8_t Message::_preamble[3] = {(std::uint8_t)'R', (std::uint8_t)'D', (std::uint8_t)'S'};
 std::size_t Message::_preambleSize = 3;
 std::size_t Message::_completeHeaderSize = sizeof(Message::_preamble) + sizeof(MessageHeader);
@@ -514,8 +587,6 @@ std::uint16_t Message::_messageNumber = 0;
 std::uint8_t Message::_endSequence[3] = {(std::uint8_t)'E', (std::uint8_t)'N', (std::uint8_t)'D'};
 std::size_t Message::_endSequenceSize = 3;
 std::size_t Message::_completeEndSequenceSize = sizeof(Message::_endSequence);
-
-
 
 /**========================================================================
  *                       COMMUNICATION CHANNELS
