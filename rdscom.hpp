@@ -77,8 +77,9 @@ class Result {
 #define RDSCOM_COLOR_PURPLE "\033[95m"
 #define RDSCOM_COLOR_RETURN "\033[0m"
 #define RDSCOM_LINE __LINE__
+#define RDS_STRINGIFY(x) #x
 
-#define RDSCOM_PREFIX RDSCOM_COLOR_PURPLE "[rdscom:" RDSCOM_LINE "] " RDSCOM_COLOR_RETURN
+#define RDSCOM_PREFIX RDSCOM_COLOR_PURPLE "[rdscom:" RDS_STRINGIFY(RDSCOM_LINE) "] " RDSCOM_COLOR_RETURN
 
 #define RDSCOM_DEBUG_PRINT(fmt, ...) \
     fprintf(stdout, RDSCOM_PREFIX fmt, ##__VA_ARGS__)
@@ -209,17 +210,6 @@ class DataPrototype {
             _fields[name] = DataField(_size, type);
             _size += _fields[name].size();
         }
-    }
-
-    DataPrototype &operator=(const DataPrototype &other) {
-        _identifier = other._identifier;
-        _size = other._size;
-        _fields = other._fields;
-        return *this;
-    }
-
-    static DataPrototype fromSerialized(std::vector<std::uint8_t> serialized) {
-        return DataPrototype(serialized);
     }
 
     DataPrototype addField(const std::string &name, DataFieldType type) {
@@ -357,22 +347,42 @@ enum MessageType {
     ERROR,
 };
 
+typedef struct MessageHeader {
+    MessageType type;
+    std::uint8_t prototypeHandle;
+    std::uint16_t messageNumber;
+
+    MessageHeader() : type(MessageType::REQUEST), prototypeHandle(0), messageNumber(0) {}
+    MessageHeader(MessageType type, std::uint8_t prototypeHandle, std::uint16_t messageNumber)
+        : type(type), prototypeHandle(prototypeHandle), messageNumber(messageNumber) {}
+
+} MessageHeader;
+
 class Message {
    public:
-    Message() : _type(MessageType::REQUEST), _buffer(DataPrototype()) {}
-    Message(const Message &other) : _type(other._type), _buffer(other._buffer) {}
-    Message(MessageType type, const DataBuffer &data) : _type(type), _buffer(data) {}
+    Message() : _header(MessageHeader()), _buffer(DataBuffer()) {}
+    Message(const Message &other) : _header(other._header), _buffer(other._buffer) {}
+    Message(MessageType type, const DataBuffer &data) : _header(MessageHeader(type, data.type().identifier(), _messageNumber++)), _buffer(data) {}
+    Message(MessageType type, const DataPrototype &proto) : _header(MessageHeader(type, proto.identifier(), _messageNumber++)), _buffer(DataBuffer(proto)) {}
+
+    static std::uint8_t getPrototypeHandleFromBuffer(const std::vector<std::uint8_t> &serialized) {
+        if (serialized.size() <= Message::_preambleSize) {
+            return RESERVED_ERROR_PROTOTYPE;
+        }
+
+        return serialized[Message::_preambleSize];
+    }
 
     static Result<Message> fromSerialized(const DataPrototype &proto, const std::vector<std::uint8_t> &serialized) {
         if (proto.identifier() == RESERVED_ERROR_PROTOTYPE) {
             return Result<Message>::error("Invalid prototype");
         }
 
-        if (serialized.size() == 0) {
+        if (serialized.size() <= Message::_preambleSize) {
             return Result<Message>::error("Empty message");
         }
 
-        MessageType type = static_cast<MessageType>(serialized[0]);
+        MessageType type = static_cast<MessageType>(serialized[Message::_preambleSize - 1]);
         Result<DataBuffer> bufferRes = DataBuffer::createFromPrototype(proto, std::vector<std::uint8_t>(serialized.begin() + 1, serialized.end()));
         if (bufferRes.isError()) {
             return Result<Message>::error("Failed to create data buffer");
@@ -381,7 +391,7 @@ class Message {
         return Result<Message>::ok(Message(type, bufferRes.value()));
     }
 
-    MessageType type() const { return _type; }
+    MessageType type() const { return _header.type; }
     DataBuffer &data() { return _buffer; }
 
     template <typename T>
@@ -403,8 +413,12 @@ class Message {
     }
 
    private:
-    MessageType _type;
+    MessageHeader _header;
     DataBuffer _buffer;
+
+    static const std::uint8_t* _preamble = "RDS";
+    static const std::uint8_t _preambleSize = 3;
+    static std::uint16_t _messageNumber;
 };
 
 /**========================================================================
@@ -417,7 +431,6 @@ class Message {
  *
  *========================================================================**/
 
-
 class CommunicationChannel {
    public:
     CommunicationChannel() {}
@@ -425,7 +438,7 @@ class CommunicationChannel {
     virtual void send(const Message &message) = 0;
 };
 
-#ifdef RDSCOM_ARDUINO // Arduino specific code
+#ifdef RDSCOM_ARDUINO  // Arduino specific code
 #include <Arduino.h>
 
 class SerialCommunicationChannel : public CommunicationChannel {
@@ -453,7 +466,7 @@ class SerialCommunicationChannel : public CommunicationChannel {
 
 #endif
 
-#ifdef RDSCOM_WINDOWS // Windows specific code for listening to a uart port
+#ifdef RDSCOM_WINDOWS  // Windows specific code for listening to a uart port
 #include <windows.h>
 
 class WindowsUARTCommunicationChannel : public CommunicationChannel {
@@ -529,10 +542,47 @@ class CommunicationInterface {
         return *this;
     }
 
+    CommunicationInterface &addPrototype(const DataPrototype &proto) {
+        std::uint8_t handle = proto.identifier();
+        if (handle == RESERVED_ERROR_PROTOTYPE) {
+            RDSCOM_DEBUG_PRINT_ERRORLN("Invalid prototype");
+            return *this;
+        }
+        _prototypes[handle] = proto;
+        return *this;
+    }
+
+    void listen() {
+        std::vector<std::uint8_t> data = _channel.receive();
+        if (data.size() == 0) {
+            return;
+        }
+
+        RDSCOM_DEBUG_PRINTLN("Received message");
+        std::uint8_t protoHandle = Message::getPrototypeHandleFromBuffer(data);
+
+        if (_prototypes.find(protoHandle) == _prototypes.end()) {
+            RDSCOM_DEBUG_PRINT_ERRORLN("No prototype found for message");
+            return;
+        }
+
+        DataPrototype proto = _prototypes[protoHandle];
+
+        Message message = Message::fromSerialized(proto, data).value();
+
+        if (_rxCallbacks.find(message.type()) != _rxCallbacks.end()) {
+            for (const auto &callback : _rxCallbacks[message.type()]) {
+                callback(message);
+            }
+        }
+    }
+
    private:
     CommunicationChannel &_channel;
     CallBackMap _rxCallbacks;
     CallBackMap _txCallbacks;
+
+    std::map<std::uint8_t, DataPrototype> _prototypes;
 };
 
 }  // namespace rdscom
