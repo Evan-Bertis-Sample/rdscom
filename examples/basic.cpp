@@ -2,15 +2,15 @@
 #include <vector>
 #include <cstddef>
 
-#define RDSCOM_WINDOWS
+#define RDSCOM_SOCKETS
 #include "rdscom.hpp"
 
 
 int main() {
     rdscom::DataPrototype type(0);
-    type.addField("id", rdscom::DataFieldType::INT);
+    type.addField("id", rdscom::DataFieldType::INT8);
     type.addField("name", rdscom::DataFieldType::BYTE);
-    type.addField("age", rdscom::DataFieldType::UINT);
+    type.addField("age", rdscom::DataFieldType::UINT8);
 
     rdscom::DataBuffer buffer(type);
     buffer.setField<int>("id", 1);

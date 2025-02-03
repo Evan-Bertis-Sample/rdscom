@@ -119,13 +119,9 @@ class Result {
 
 /// @brief Enum for the different types of data fields
 enum DataFieldType {
-    INT,
-    UINT,
-    FLOAT,
-    DOUBLE,
-    BYTE,
-    BOOL,
-    NONE,
+    UINT8, UINT16, UINT32, UINT64,
+    INT8, INT16, INT32, INT64,
+    FLOAT, DOUBLE, BOOL, BYTE, NONE
 };
 
 /// @brief DataField class for a single field in a Data Prototype
@@ -145,20 +141,22 @@ struct DataField {
 
     std::size_t size() const {
         switch (type) {
-            case DataFieldType::INT:
-                return sizeof(int);
-            case DataFieldType::UINT:
-                return sizeof(unsigned int);
-            case DataFieldType::FLOAT:
-                return sizeof(float);
-            case DataFieldType::DOUBLE:
-                return sizeof(double);
-            case DataFieldType::BYTE:
-                return sizeof(std::uint8_t);
+            case DataFieldType::UINT8:
+            case DataFieldType::INT8:
             case DataFieldType::BOOL:
-                return sizeof(bool);
-            case DataFieldType::NONE:
-                return 0;
+            case DataFieldType::BYTE:
+                return 1;
+            case DataFieldType::UINT16:
+            case DataFieldType::INT16:
+                return 2;
+            case DataFieldType::UINT32:
+            case DataFieldType::INT32:
+            case DataFieldType::FLOAT:
+                return 4;
+            case DataFieldType::UINT64:
+            case DataFieldType::INT64:
+            case DataFieldType::DOUBLE:
+                return 8;
             default:
                 return 0;
         }
@@ -210,6 +208,13 @@ class DataPrototype {
             _fields[name] = DataField(_size, type);
             _size += _fields[name].size();
         }
+    }
+
+    DataPrototype &operator=(const DataPrototype &other) {
+        _identifier = other._identifier;
+        _size = other._size;
+        _fields = other._fields;
+        return *this;
     }
 
     DataPrototype addField(const std::string &name, DataFieldType type) {
@@ -325,6 +330,7 @@ class DataBuffer {
 
     std::vector<std::uint8_t> data() const { return _data; }
     std::size_t size() const { return _data.size(); }
+    DataPrototype type() const { return _type; }
 
    private:
     DataPrototype _type;
@@ -362,6 +368,7 @@ class Message {
    public:
     Message() : _header(MessageHeader()), _buffer(DataBuffer()) {}
     Message(const Message &other) : _header(other._header), _buffer(other._buffer) {}
+    Message(const MessageHeader &header, const DataBuffer &data) : _header(header), _buffer(data) {}
     Message(MessageType type, const DataBuffer &data) : _header(MessageHeader(type, data.type().identifier(), _messageNumber++)), _buffer(data) {}
     Message(MessageType type, const DataPrototype &proto) : _header(MessageHeader(type, proto.identifier(), _messageNumber++)), _buffer(DataBuffer(proto)) {}
 
@@ -379,16 +386,28 @@ class Message {
         }
 
         if (serialized.size() <= Message::_preambleSize) {
-            return Result<Message>::error("Empty message");
+            return Result<Message>::error("Message too short!");
         }
 
-        MessageType type = static_cast<MessageType>(serialized[Message::_preambleSize - 1]);
+        // check if the preamble is correct
+        for (std::size_t i = 0; i < Message::_preambleSize; i++) {
+            if (serialized[i] != Message::_preamble[i]) {
+                return Result<Message>::error("Invalid preamble");
+            }
+        }
+
+        MessageHeader header = MessageHeader(
+            static_cast<MessageType>(serialized[Message::_preambleSize - 1]),
+            serialized[Message::_preambleSize],
+            static_cast<std::uint16_t>(serialized[Message::_preambleSize + 1] << 8 | serialized[Message::_preambleSize + 2])
+        );
+
         Result<DataBuffer> bufferRes = DataBuffer::createFromPrototype(proto, std::vector<std::uint8_t>(serialized.begin() + 1, serialized.end()));
         if (bufferRes.isError()) {
             return Result<Message>::error("Failed to create data buffer");
         }
 
-        return Result<Message>::ok(Message(type, bufferRes.value()));
+        return Result<Message>::ok(Message(header, bufferRes.value()));
     }
 
     MessageType type() const { return _header.type; }
@@ -406,7 +425,7 @@ class Message {
 
     std::vector<std::uint8_t> serialize() const {
         std::vector<std::uint8_t> serialized;
-        serialized.push_back(static_cast<std::uint8_t>(_type));
+        serialized.push_back(static_cast<std::uint8_t>(_header.type));
         std::vector<std::uint8_t> data = _buffer.data();
         serialized.insert(serialized.end(), data.begin(), data.end());
         return serialized;
@@ -416,10 +435,19 @@ class Message {
     MessageHeader _header;
     DataBuffer _buffer;
 
-    static const std::uint8_t* _preamble = "RDS";
-    static const std::uint8_t _preambleSize = 3;
+    static std::uint8_t _preamble[3];
+    static std::size_t _preambleSize;
+    static std::size_t _completeHeaderSize;
     static std::uint16_t _messageNumber;
 };
+
+
+std::uint8_t Message::_preamble[3] = {(std::uint8_t)'R', (std::uint8_t)'D', (std::uint8_t)'S'};
+std::size_t Message::_preambleSize = 3;
+std::size_t Message::_completeHeaderSize = sizeof(Message::_preamble) + sizeof(MessageHeader);
+std::uint16_t Message::_messageNumber = 0;
+
+
 
 /**========================================================================
  *                       COMMUNICATION CHANNELS
@@ -466,46 +494,6 @@ class SerialCommunicationChannel : public CommunicationChannel {
 
 #endif
 
-#ifdef RDSCOM_WINDOWS  // Windows specific code for listening to a uart port
-#include <windows.h>
-
-class WindowsUARTCommunicationChannel : public CommunicationChannel {
-   public:
-    WindowsUARTCommunicationChannel(const char *portName) : _portName(portName) {
-        _handle = CreateFileA(portName, GENERIC_READ | GENERIC_WRITE, 0, NULL, OPEN_EXISTING, 0, NULL);
-        if (_handle == INVALID_HANDLE_VALUE) {
-            RDSCOM_DEBUG_PRINT_ERRORLN("Failed to open port %s", portName);
-        }
-    }
-
-    ~WindowsUARTCommunicationChannel() {
-        CloseHandle(_handle);
-    }
-
-    std::vector<std::uint8_t> receive() override {
-        std::vector<std::uint8_t> data;
-        DWORD bytesRead;
-        if (ReadFile(_handle, _buffer, 1, &bytesRead, NULL)) {
-            data.push_back(_buffer[0]);
-        }
-        return data;
-    }
-
-    void send(const Message &message) override {
-        std::vector<std::uint8_t> serialized = message.serialize();
-        for (std::uint8_t byte : serialized) {
-            WriteFile(_handle, &byte, 1, NULL, NULL);
-        }
-    }
-
-   private:
-    const char *_portName;
-    HANDLE _handle;
-    char _buffer[1];
-};
-
-#endif
-
 /**========================================================================
  *                           COMMUNICATION
  *
@@ -524,6 +512,8 @@ typedef std::map<std::uint8_t, CallBackList> CallBackMap;
 
 class CommunicationInterface {
    public:
+    CommunicationInterface(CommunicationChannel &channel) : _channel(channel) {}
+
     CommunicationInterface &addRxCallback(std::uint8_t type, std::function<void(const Message &message)> callback) {
         if (_rxCallbacks.find(type) == _rxCallbacks.end()) {
             _rxCallbacks[type] = CallBackList();
