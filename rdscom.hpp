@@ -48,8 +48,8 @@ template <typename T>
 class Result {
    public:
     static Result<T> ok(T value) { return Result<T>(value); }
-    static Result<T> error() { return Result<T>(true); }
-    static Result<T> error(const char *errorMessage) { return Result<T>(true, errorMessage); }
+    static Result<T> errorResult() { return Result<T>(true); }
+    static Result<T> errorResult(const char *errorMessage) { return Result<T>(true, errorMessage); }
 
     Result() : _error(true) {}
 
@@ -62,6 +62,7 @@ class Result {
 
     T value() const { return _value; }
     bool isError() const { return _error; }
+    const char *error() const { return _errorMessage; }
 
    private:
     T _value;
@@ -226,7 +227,7 @@ class DataPrototype {
     Result<DataField> findField(const std::string &name) const {
         auto it = _fields.find(name);
         if (it == _fields.end()) {
-            return Result<DataField>::error("Field not found");
+            return Result<DataField>::errorResult("Field not found");
         }
         return Result<DataField>::ok(it->second);
     }
@@ -268,11 +269,11 @@ class DataBuffer {
 
     static Result<DataBuffer> createFromPrototype(const DataPrototype &type, std::vector<std::uint8_t> data) {
         if (type.identifier() == RESERVED_ERROR_PROTOTYPE) {
-            return Result<DataBuffer>::error("Invalid prototype");
+            return Result<DataBuffer>::errorResult("Invalid prototype");
         }
 
         if (data.size() != type.size()) {
-            return Result<DataBuffer>::error("Data size mismatch");
+            return Result<DataBuffer>::errorResult("Data size mismatch");
         }
 
         DataBuffer buffer(type);
@@ -293,14 +294,14 @@ class DataBuffer {
 
         Result<DataField> fieldRes = _type.findField(name);
         if (fieldRes.isError()) {
-            return Result<T>::error("Field not found");
+            return Result<T>::errorResult("Field not found");
         }
 
         DataField field = fieldRes.value();
 
         if (sizeof(T) != field.size()) {
             // std::cerr << "Field size mismatch" << std::endl;
-            return Result<T>::error("Field size mismatch");
+            return Result<T>::errorResult("Field size mismatch");
         }
 
         T value;
@@ -364,7 +365,7 @@ typedef struct MessageHeader {
 
     static Result<MessageHeader> fromSerialized(const std::vector<std::uint8_t> &serialized) {
         if (serialized.size() < 4) {
-            return Result<MessageHeader>::error("Message too short");
+            return Result<MessageHeader>::errorResult("Message too short");
         }
 
         MessageType type = static_cast<MessageType>(serialized[0]);
@@ -401,23 +402,23 @@ class Message {
 
     static Result<Message> fromSerialized(const DataPrototype &proto, const std::vector<std::uint8_t> &serialized) {
         if (proto.identifier() == RESERVED_ERROR_PROTOTYPE) {
-            return Result<Message>::error("Invalid prototype");
+            return Result<Message>::errorResult("Invalid prototype");
         }
 
         if (serialized.size() <= Message::_preambleSize) {
-            return Result<Message>::error("Message too short!");
+            return Result<Message>::errorResult("Message too short!");
         }
 
         // check if the preamble is correct
         for (std::size_t i = 0; i < Message::_preambleSize; i++) {
             if (serialized[i] != Message::_preamble[i]) {
-                return Result<Message>::error("Invalid preamble");
+                return Result<Message>::errorResult("Invalid preamble");
             }
         }
 
         Result<MessageHeader> headerRes = MessageHeader::fromSerialized(std::vector<std::uint8_t>(serialized.begin() + Message::_preambleSize, serialized.begin() + Message::_preambleSize + 4));
         if (headerRes.isError()) {
-            return Result<Message>::error("Failed to create message header");
+            return Result<Message>::errorResult("Failed to create message header");
         }
 
         MessageHeader header = headerRes.value();
@@ -427,13 +428,13 @@ class Message {
             serialized.end() - Message::_endSequenceSize));
 
         if (bufferRes.isError()) {
-            return Result<Message>::error("Failed to create data buffer");
+            return Result<Message>::errorResult("Failed to create data buffer");
         }
 
         // check if the end sequence is correct
         for (std::size_t i = 0; i < Message::_endSequenceSize; i++) {
             if (serialized[serialized.size() - Message::_endSequenceSize + i] != Message::_endSequence[i]) {
-                return Result<Message>::error("Invalid end sequence");
+                return Result<Message>::errorResult("Invalid end sequence");
             }
         }
 

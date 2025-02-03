@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <vector>
 #include <cstddef>
+#include <string>
 
 #define RDSCOM_SOCKETS
 #include "rdscom.hpp"
@@ -27,7 +28,16 @@ int main() {
 
     message.printClean(std::cout);;
 
-    rdscom::Message deserialized = rdscom::Message::fromSerialized(type, serialized).value();
+    rdscom::Result<rdscom::Message> deserializedRes = rdscom::Message::fromSerialized(type, serialized);
+
+    if (deserializedRes.isError()) {
+        printf("Error deserializing message\n");
+        printf("Error: %s\n", deserializedRes.error());
+        return 1;
+    }
+
+    rdscom::Message deserialized = deserializedRes.value();
+
     printf("Deserialized message type: %d\n", deserialized.type());
     printf("Deserialized message data:\n");
     printf("id: %d\n", deserialized.data().getField<int>("id").value());
