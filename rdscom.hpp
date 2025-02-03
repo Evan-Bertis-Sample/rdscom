@@ -84,10 +84,20 @@ template <typename OnError, typename... Fs>
 bool check(OnError onError, Fs &&...functions) {
     // check if any of the functions return an error
     bool error = false;
+    std::vector<std::string> errors;
     std::initializer_list<int>{(error |= functions.isError(), 0)...};
+    std::initializer_list<int>{(errors.push_back(functions.error()), 0)...};
 
     if (error) {
-        onError("Error in check");
+        // concatenate the error messages into one string
+        std::string errorMessage;
+        for (const std::string &error : errors) {
+            errorMessage += error;
+            errorMessage += "\n";
+        }
+
+        onError(errorMessage.c_str());
+
         return true;
     }
 
