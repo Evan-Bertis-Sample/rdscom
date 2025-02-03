@@ -362,6 +362,25 @@ typedef struct MessageHeader {
     MessageHeader(MessageType type, std::uint8_t prototypeHandle, std::uint16_t messageNumber)
         : type(type), prototypeHandle(prototypeHandle), messageNumber(messageNumber) {}
 
+    static Result<MessageHeader> fromSerialized(const std::vector<std::uint8_t> &serialized) {
+        if (serialized.size() < 4) {
+            return Result<MessageHeader>::error("Message too short");
+        }
+
+        MessageType type = static_cast<MessageType>(serialized[0]);
+        std::uint8_t prototypeHandle = serialized[1];
+        std::uint16_t messageNumber = static_cast<std::uint16_t>(serialized[2] << 8 | serialized[3]);
+
+        return Result<MessageHeader>::ok(MessageHeader(type, prototypeHandle, messageNumber));
+    }
+
+    void insertSerialized(std::vector<std::uint8_t> &serialized) const {
+        serialized.push_back(static_cast<std::uint8_t>(type));
+        serialized.push_back(prototypeHandle);
+        serialized.push_back(static_cast<std::uint8_t>(messageNumber >> 8));
+        serialized.push_back(static_cast<std::uint8_t>(messageNumber & 0xFF));
+    }
+
 } MessageHeader;
 
 class Message {
@@ -396,15 +415,26 @@ class Message {
             }
         }
 
-        MessageHeader header = MessageHeader(
-            static_cast<MessageType>(serialized[Message::_preambleSize - 1]),
-            serialized[Message::_preambleSize],
-            static_cast<std::uint16_t>(serialized[Message::_preambleSize + 1] << 8 | serialized[Message::_preambleSize + 2])
-        );
+        Result<MessageHeader> headerRes = MessageHeader::fromSerialized(std::vector<std::uint8_t>(serialized.begin() + Message::_preambleSize, serialized.begin() + Message::_preambleSize + 4));
+        if (headerRes.isError()) {
+            return Result<Message>::error("Failed to create message header");
+        }
 
-        Result<DataBuffer> bufferRes = DataBuffer::createFromPrototype(proto, std::vector<std::uint8_t>(serialized.begin() + 1, serialized.end()));
+        MessageHeader header = headerRes.value();
+
+        Result<DataBuffer> bufferRes = DataBuffer::createFromPrototype(proto, std::vector<std::uint8_t>(
+            serialized.begin() + 1, 
+            serialized.end() - Message::_endSequenceSize));
+
         if (bufferRes.isError()) {
             return Result<Message>::error("Failed to create data buffer");
+        }
+
+        // check if the end sequence is correct
+        for (std::size_t i = 0; i < Message::_endSequenceSize; i++) {
+            if (serialized[serialized.size() - Message::_endSequenceSize + i] != Message::_endSequence[i]) {
+                return Result<Message>::error("Invalid end sequence");
+            }
         }
 
         return Result<Message>::ok(Message(header, bufferRes.value()));
@@ -425,9 +455,11 @@ class Message {
 
     std::vector<std::uint8_t> serialize() const {
         std::vector<std::uint8_t> serialized;
-        serialized.push_back(static_cast<std::uint8_t>(_header.type));
+        serialized.insert(serialized.end(), Message::_preamble, Message::_preamble + Message::_preambleSize);
+        _header.insertSerialized(serialized);
         std::vector<std::uint8_t> data = _buffer.data();
         serialized.insert(serialized.end(), data.begin(), data.end());
+        serialized.insert(serialized.end(), Message::_endSequence, Message::_endSequence + Message::_endSequenceSize);
         return serialized;
     }
 
@@ -439,6 +471,9 @@ class Message {
     static std::size_t _preambleSize;
     static std::size_t _completeHeaderSize;
     static std::uint16_t _messageNumber;
+    static std::uint8_t _endSequence[3];
+    static std::size_t _endSequenceSize;
+    static std::size_t _completeEndSequenceSize;
 };
 
 
@@ -446,6 +481,9 @@ std::uint8_t Message::_preamble[3] = {(std::uint8_t)'R', (std::uint8_t)'D', (std
 std::size_t Message::_preambleSize = 3;
 std::size_t Message::_completeHeaderSize = sizeof(Message::_preamble) + sizeof(MessageHeader);
 std::uint16_t Message::_messageNumber = 0;
+std::uint8_t Message::_endSequence[3] = {(std::uint8_t)'E', (std::uint8_t)'N', (std::uint8_t)'D'};
+std::size_t Message::_endSequenceSize = 3;
+std::size_t Message::_completeEndSequenceSize = sizeof(Message::_endSequence);
 
 
 
