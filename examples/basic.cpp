@@ -15,18 +15,18 @@ int main() {
 
     rdscom::DataBuffer buffer(type);
 
-    rdscom::check(
-        [](const char *error) {
-            printf("Error: %s\n", error);
-            return 1;
-        },
+    bool error = rdscom::check(
+        rdscom::defaultErrorCallback(std::cerr),
         buffer.setField<int>("id", 1),
         buffer.setField<std::uint8_t>("name", std::uint8_t('A')),
         buffer.setField<std::uint8_t>("age", 20),
         buffer.setField<std::uint8_t>("pain", 20)
     );
 
-
+    if (error) {
+        printf("Error setting field\n");
+        return 1;
+    }
 
     // get the fields
     printf("id: %d\n", buffer.getField<int>("id").value());

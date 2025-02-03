@@ -55,6 +55,8 @@ class Result {
     static Result<T> errorResult() { return Result<T>(true); }
     static Result<T> errorResult(const char *errorMessage) { return Result<T>(true, errorMessage); }
 
+    operator bool() const { return !_error; }
+
     Result() : _error(true) {}
 
     Result<T> operator=(const Result<T> &other) {
@@ -79,26 +81,21 @@ class Result {
 };
 
 template <typename OnError, typename... Fs>
-void check(OnError onError, Fs &&...functions) {
-    // Call all the functions (each returning a Result<...>) and store them in a tuple
-    auto results = std::make_tuple(functions()...);
+bool check(OnError onError, Fs &&...functions) {
+    // check if any of the functions return an error
+    bool error = false;
+    std::initializer_list<int>{(error |= functions.isError(), 0)...};
 
-    // We’ll scan through all results. If any is error, we call onError.
-    bool foundError = false;
-    const char *errorMsg = "";
-
-    // "std::apply" applies a lambda to each element of the tuple
-    std::apply(
-        [&](auto &&...r) {
-            // Fold expression to check each result
-            ((r.isError() ? (foundError = true, errorMsg = r.error()) : void()), ...);
-        },
-        results);
-
-    if (foundError) {
-        // If any error found, call onError
-        onError(errorMsg);
+    if (error) {
+        onError("Error in check");
+        return true;
     }
+
+    return false;
+}
+
+std::function<void(const char *)> defaultErrorCallback(std::ostream &stream) {
+    return [&stream](const char *error) { stream << "Error: " << error << std::endl; };
 }
 
 #ifdef RDSCOM_DEBUG_ENABLED
