@@ -75,8 +75,8 @@ class Result {
     bool _error;
     const char *_errorMessage;
 
-    Result(T value) : _value(value), _error(false) {}
-    Result(bool error) : _error(error) {}
+    Result(T value) : _value(value), _error(false), _errorMessage("") {}
+    Result(bool error) : _error(error), _errorMessage(""), _value(T()) {}
     Result(bool error, const char *errorMessage) : _error(error), _errorMessage(errorMessage) {}
 };
 
@@ -92,6 +92,9 @@ bool check(OnError onError, Fs &&...functions) {
         // concatenate the error messages into one string
         std::string errorMessage;
         for (const std::string &error : errors) {
+            if (error.empty()) {
+                continue;
+            }
             errorMessage += error;
             errorMessage += "\n";
         }
