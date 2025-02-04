@@ -38,6 +38,9 @@
 #include <string>
 #include <tuple>
 #include <utility>
+#include <vector>
+#include <string>
+#include <sstream>
 
 #define RDSCOM_VERSION "0.1.0"
 #define RDSCOM_DEBUG_ENABLED 1
@@ -478,12 +481,28 @@ class Message {
             }
         }
 
+        // check if the end sequence is correct
+        for (std::size_t i = 0; i < Message::_endSequenceSize; i++) {
+            if (serialized[serialized.size() - Message::_endSequenceSize + i] != Message::_endSequence[i]) {
+                return Result<Message>::errorResult("Invalid end sequence");
+            }
+        }
+
         Result<MessageHeader> headerRes = MessageHeader::fromSerialized(std::vector<std::uint8_t>(serialized.begin() + Message::_preambleSize, serialized.begin() + Message::_preambleSize + 4));
         if (headerRes.isError()) {
             return Result<Message>::errorResult("Failed to create message header");
         }
 
         MessageHeader header = headerRes.value();
+
+        // now check that the payload is the correct size
+        std::size_t expectedSize = Message::_preambleSize + Message::_completeHeaderSize + proto.size() + Message::_endSequenceSize;
+        if (serialized.size() != expectedSize) {
+            std::stringstream ss;
+            ss << "Message size mismatch, expected: " << expectedSize << ", got: " << serialized.size();
+            return Result<Message>::errorResult(ss.str());
+        }
+
 
         Result<DataBuffer> bufferRes = DataBuffer::createFromPrototype(proto, std::vector<std::uint8_t>(
                                                                                   serialized.begin() + 1,
@@ -493,12 +512,6 @@ class Message {
             return Result<Message>::errorResult("Failed to create data buffer");
         }
 
-        // check if the end sequence is correct
-        for (std::size_t i = 0; i < Message::_endSequenceSize; i++) {
-            if (serialized[serialized.size() - Message::_endSequenceSize + i] != Message::_endSequence[i]) {
-                return Result<Message>::errorResult("Invalid end sequence");
-            }
-        }
 
         return Result<Message>::ok(Message(header, bufferRes.value()));
     }
