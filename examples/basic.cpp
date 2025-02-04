@@ -45,7 +45,7 @@ int main() {
 
     if (deserializedRes.isError()) {
         printf("Error deserializing message\n");
-        printf("Error: %s\n", deserializedRes.error());
+        printf("Error: %s\n", deserializedRes.error().c_str());
         return 1;
     }
 

@@ -53,7 +53,7 @@ class Result {
    public:
     static Result<T> ok(T value) { return Result<T>(value); }
     static Result<T> errorResult() { return Result<T>(true); }
-    static Result<T> errorResult(const char *errorMessage) { return Result<T>(true, errorMessage); }
+    static Result<T> errorResult(std::string errorMessage) { return Result<T>(true, errorMessage); }
 
     operator bool() const { return !_error; }
 
@@ -68,16 +68,16 @@ class Result {
 
     T value() const { return _value; }
     bool isError() const { return _error; }
-    const char *error() const { return _errorMessage; }
+    std::string error() const { return _errorMessage; }
 
    private:
     T _value;
     bool _error;
-    const char *_errorMessage;
+    std::string _errorMessage;
 
     Result(T value) : _value(value), _error(false), _errorMessage("") {}
     Result(bool error) : _error(error), _errorMessage(""), _value(T()) {}
-    Result(bool error, const char *errorMessage) : _error(error), _errorMessage(errorMessage) {}
+    Result(bool error, std::string errorMessage) : _error(error), _errorMessage(errorMessage) {}
 };
 
 template <typename OnError, typename... Fs>
@@ -274,7 +274,9 @@ class DataPrototype {
     Result<DataField> findField(const std::string &name) const {
         auto it = _fields.find(name);
         if (it == _fields.end()) {
-            return Result<DataField>::errorResult("Field not found");
+            std::string errorMessage = "Field not found: ";
+            errorMessage += name;
+            return Result<DataField>::errorResult(errorMessage);
         }
         return Result<DataField>::ok(it->second);
     }
@@ -316,11 +318,17 @@ class DataBuffer {
 
     static Result<DataBuffer> createFromPrototype(const DataPrototype &type, std::vector<std::uint8_t> data) {
         if (type.identifier() == RESERVED_ERROR_PROTOTYPE) {
-            return Result<DataBuffer>::errorResult("Invalid prototype");
+            std::string errorMessage = "Invalid prototype: ";
+            errorMessage += type.identifier();
+            return Result<DataBuffer>::errorResult(errorMessage);
         }
 
         if (data.size() != type.size()) {
-            return Result<DataBuffer>::errorResult("Data size mismatch");
+            std::string errorMessage = "Data size mismatch, expected: ";
+            errorMessage += type.size();
+            errorMessage += ", got: ";
+            errorMessage += data.size();
+            return Result<DataBuffer>::errorResult(errorMessage);
         }
 
         DataBuffer buffer(type);
@@ -341,14 +349,15 @@ class DataBuffer {
 
         Result<DataField> fieldRes = _type.findField(name);
         if (fieldRes.isError()) {
-            return Result<T>::errorResult("Field not found");
+            return Result<T>::errorResult(fieldRes.error());
         }
 
         DataField field = fieldRes.value();
 
         if (sizeof(T) != field.size()) {
-            // std::cerr << "Field size mismatch" << std::endl;
-            return Result<T>::errorResult("Field size mismatch");
+            std::string errorMessage = "Field size mismatch: ";
+            errorMessage += name;
+            return Result<T>::errorResult(errorMessage);
         }
 
         T value;
@@ -363,14 +372,15 @@ class DataBuffer {
 
         Result<DataField> fieldRes = _type.findField(name);
         if (fieldRes.isError()) {
-            return Result<T>::errorResult("Field not found");
+            return Result<T>::errorResult(fieldRes.error());
         }
 
         DataField field = fieldRes.value();
 
         if (sizeof(T) != field.size()) {
-            // std::cerr << "Field size mismatch" << std::endl;
-            return Result<T>::errorResult("Field size mismatch");
+            std::string errorMessage = "Field size mismatch: ";
+            errorMessage += name;
+            return Result<T>::errorResult(errorMessage);
         }
 
         std::memcpy(_data.data() + field.offset, &value, sizeof(T));
@@ -413,7 +423,9 @@ typedef struct MessageHeader {
 
     static Result<MessageHeader> fromSerialized(const std::vector<std::uint8_t> &serialized) {
         if (serialized.size() < 4) {
-            return Result<MessageHeader>::errorResult("Message too short");
+            std::string errorMessage = "Message too short: ";
+            errorMessage += serialized.size();
+            return Result<MessageHeader>::errorResult(errorMessage);
         }
 
         MessageType type = static_cast<MessageType>(serialized[0]);
@@ -454,7 +466,9 @@ class Message {
         }
 
         if (serialized.size() <= Message::_preambleSize) {
-            return Result<Message>::errorResult("Message too short!");
+            std::string errorMessage = "Message too short: ";
+            errorMessage += serialized.size();
+            return Result<Message>::errorResult(errorMessage);
         }
 
         // check if the preamble is correct
