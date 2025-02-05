@@ -451,6 +451,12 @@ class Message {
     Message(MessageType type, const DataBuffer &data) : _header(MessageHeader(type, data.type().identifier(), _messageNumber++)), _buffer(data) {}
     Message(MessageType type, const DataPrototype &proto) : _header(MessageHeader(type, proto.identifier(), _messageNumber++)), _buffer(DataBuffer(proto)) {}
 
+    bool operator==(const Message &other) const {
+        return _header.type == other._header.type && _header.prototypeHandle == other._header.prototypeHandle && _header.messageNumber == other._header.messageNumber && _buffer.data() == other._buffer.data();
+    }
+
+    bool operator!=(const Message &other) const { return !(*this == other); }
+
     static std::uint8_t getPrototypeHandleFromBuffer(const std::vector<std::uint8_t> &serialized) {
         if (serialized.size() <= Message::_preambleSize) {
             return RESERVED_ERROR_PROTOTYPE;

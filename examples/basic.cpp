@@ -56,5 +56,10 @@ int main() {
     std::cout << "Deserialized message:\n";
     deserialized.printClean(std::cout);
 
+    if (message != deserialized) {
+        std::cerr << "Messages are not equal\n";
+        return 1;
+    }
+
     return 0;
 }
