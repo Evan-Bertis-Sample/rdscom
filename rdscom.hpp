@@ -776,6 +776,27 @@ class SerialCommunicationChannel : public CommunicationChannel {
 
 #endif
 
+class DummyChannel : public CommunicationChannel {
+   public:
+    std::vector<std::uint8_t> receive() override { 
+        if (_data.empty()) {
+            return {};
+        }
+
+        std::vector<std::uint8_t> data = _data;
+        _data.clear();
+        return data;
+    }
+
+    void send(const rdscom::Message &message) override {
+        std::vector<std::uint8_t> serialized = message.serialize();
+        _data.insert(_data.end(), serialized.begin(), serialized.end());
+    }
+
+   private:
+    std::vector<std::uint8_t> _data;
+};
+
 /**========================================================================
  *                           COMMUNICATION
  *
@@ -816,12 +837,13 @@ class CommunicationInterface {
     }
 
     void listen() {
+        _ticksSinceLastMessage++;
+
         std::vector<std::uint8_t> data = _channel.receive();
         if (data.size() == 0) {
             return;
         }
 
-        RDSCOM_DEBUG_PRINTLN("Received message");
         std::uint8_t protoHandle = Message::getPrototypeHandleFromBuffer(data);
 
         if (_prototypes.find(protoHandle) == _prototypes.end()) {
@@ -830,15 +852,33 @@ class CommunicationInterface {
         }
 
         DataPrototype proto = _prototypes[protoHandle];
+        RDSCOM_DEBUG_PRINTLN("Received message of type %d", proto.identifier());
 
         Message message = Message::fromSerialized(proto, data).value();
+        _ticksSinceLastMessage = 0;
 
         if (_rxCallbacks.find(message.type()) != _rxCallbacks.end()) {
+            RDSCOM_DEBUG_PRINTLN("Calling callbacks for message type %d", message.type());
             for (const auto &callback : _rxCallbacks[message.type()]) {
                 callback(message);
             }
         }
     }
+
+    void sendMessage(const Message &message) {
+        _channel.send(message);
+    }
+
+    Result<DataPrototype> getPrototype(std::uint8_t identifier) {
+        // do we have the prototype?
+        if (_prototypes.find(identifier) == _prototypes.end()) {
+            return Result<DataPrototype>::errorResult("Prototype not found");
+        }
+
+        return Result<DataPrototype>::ok(_prototypes[identifier]);
+    }
+
+    std::uint64_t ticksSinceLastMessage() const { return _ticksSinceLastMessage; }
 
    private:
     CallBackMap &getMap(MessageType type) {
@@ -850,12 +890,15 @@ class CommunicationInterface {
             case MessageType::ERROR:
                 return _errCallbacks;
         }
+
+        return _rxCallbacks;
     }
 
     CommunicationChannel &_channel;
     CallBackMap _rxCallbacks;
     CallBackMap _txCallbacks;
     CallBackMap _errCallbacks;
+    std::uint64_t _ticksSinceLastMessage = 0;
 
     std::map<std::uint8_t, DataPrototype> _prototypes;
 };
