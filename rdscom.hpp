@@ -23,6 +23,13 @@
  * @createdOn      :  1/30/2025
  * @description    :  Communication library for embedded systems in C
  *
+ * ?                               TOC
+ * 1. UTILITIES
+ * 2. DATA FIELDS & PROTOTYPES
+ * 3. MESSAGES
+ * 4. COMMUNICATION CHANNELS
+ * 5. COMMUNICATION
+ * 
  *========================================================================**/
 
 #include <cstddef>
