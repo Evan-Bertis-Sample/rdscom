@@ -510,6 +510,8 @@ enum MessageType : std::uint8_t {
     ERROR,
 };
 
+static const std::size_t numMessageTypes = 3;
+
 /// @brief A struct for containing meta information about a message
 struct MessageHeader {
     /// @brief The type of the message
@@ -791,23 +793,26 @@ typedef std::map<std::uint8_t, CallBackList> CallBackMap;
 
 class CommunicationInterface {
    public:
-    CommunicationInterface(CommunicationChannel &channel) : _channel(channel) {}
+    CommunicationInterface(CommunicationChannel &channel) : _channel(channel), _rxCallbacks(numMessageTypes), _txCallbacks(numMessageTypes) {}
 
-    CommunicationInterface &addRxCallback(std::uint8_t type, std::function<void(const Message &message)> callback) {
-        if (_rxCallbacks.find(type) == _rxCallbacks.end()) {
-            _rxCallbacks[type] = CallBackList();
+    CommunicationInterface &addRxCallback(std::uint8_t type, MessageType msgType, std::function<void(const Message &message)> callback) {
+        CallBackMap &map = getMap(msgType);
+        if (map.find(type) == map.end()) {
+            map[type] = CallBackList();
         }
-
-        _rxCallbacks[type].push_back(callback);
+        map[type].push_back(callback);
         return *this;
     }
 
-    CommunicationInterface &addTxCallback(std::uint8_t type, std::function<void(const Message &message)> callback) {
-        if (_txCallbacks.find(type) == _txCallbacks.end()) {
-            _txCallbacks[type] = CallBackList();
+    CommunicationInterface &addTxCallback(std::uint8_t type, MessageType msgType, std::function<void(const Message &message)> callback) {
+        CallBackMap &map = getMap(msgType);
+
+        if (map.find(type) == map.end()) {
+            map[type] = CallBackList();
         }
 
-        _txCallbacks[type].push_back(callback);
+        map[type].push_back(callback);
+
         return *this;
     }
 
@@ -847,9 +852,14 @@ class CommunicationInterface {
     }
 
    private:
+
+    CallBackMap &getMap(MessageType type) {
+        return _rxCallbacks[type];
+    }
+
     CommunicationChannel &_channel;
-    CallBackMap _rxCallbacks;
-    CallBackMap _txCallbacks;
+    std::vector<CallBackMap> _rxCallbacks;
+    std::vector<CallBackMap> _txCallbacks;
 
     std::map<std::uint8_t, DataPrototype> _prototypes;
 };

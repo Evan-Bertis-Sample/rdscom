@@ -3,9 +3,7 @@
 #include <cstddef>
 #include <string>
 
-#define RDSCOM_SOCKETS
 #include "rdscom.hpp"
-
 
 int main() {
     // Create a prototype for our message
