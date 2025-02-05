@@ -29,7 +29,7 @@
  * 3. MESSAGES
  * 4. COMMUNICATION CHANNELS
  * 5. COMMUNICATION
- * 
+ *
  *========================================================================**/
 
 #include <cstddef>
@@ -793,26 +793,14 @@ typedef std::map<std::uint8_t, CallBackList> CallBackMap;
 
 class CommunicationInterface {
    public:
-    CommunicationInterface(CommunicationChannel &channel) : _channel(channel), _rxCallbacks(numMessageTypes), _txCallbacks(numMessageTypes) {}
+    CommunicationInterface(CommunicationChannel &channel) : _channel(channel), _rxCallbacks(), _txCallbacks(), _errCallbacks() {}
 
-    CommunicationInterface &addRxCallback(std::uint8_t type, MessageType msgType, std::function<void(const Message &message)> callback) {
+    CommunicationInterface &addCallback(std::uint8_t type, MessageType msgType, std::function<void(const Message &message)> callback) {
         CallBackMap &map = getMap(msgType);
         if (map.find(type) == map.end()) {
             map[type] = CallBackList();
         }
         map[type].push_back(callback);
-        return *this;
-    }
-
-    CommunicationInterface &addTxCallback(std::uint8_t type, MessageType msgType, std::function<void(const Message &message)> callback) {
-        CallBackMap &map = getMap(msgType);
-
-        if (map.find(type) == map.end()) {
-            map[type] = CallBackList();
-        }
-
-        map[type].push_back(callback);
-
         return *this;
     }
 
@@ -852,14 +840,23 @@ class CommunicationInterface {
     }
 
    private:
-
     CallBackMap &getMap(MessageType type) {
-        return _rxCallbacks[type];
+        switch (type) {
+            case MessageType::REQUEST:
+                return _rxCallbacks;
+            case MessageType::RESPONSE:
+                return _txCallbacks;
+            case MessageType::ERROR:
+                return _errCallbacks;
+            default:
+                return CallBackMap();
+        }
     }
 
     CommunicationChannel &_channel;
-    std::vector<CallBackMap> _rxCallbacks;
-    std::vector<CallBackMap> _txCallbacks;
+    CallBackMap _rxCallbacks;
+    CallBackMap _txCallbacks;
+    CallBackMap _errCallbacks;
 
     std::map<std::uint8_t, DataPrototype> _prototypes;
 };
