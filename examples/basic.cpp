@@ -9,9 +9,9 @@
 
 int main() {
     rdscom::DataPrototype type(0);
-    type.addField("id", rdscom::DataFieldType::INT8);
-    type.addField("name", rdscom::DataFieldType::BYTE);
-    type.addField("age", rdscom::DataFieldType::UINT8);
+    type.addField("id", rdscom::DataFieldType::INT8)
+        .addField("name", rdscom::DataFieldType::BYTE)
+        .addField("age", rdscom::DataFieldType::UINT8);
 
     rdscom::DataBuffer buffer(type);
 

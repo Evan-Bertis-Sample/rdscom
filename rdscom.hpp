@@ -32,15 +32,11 @@
 #include <iostream>
 #include <map>
 #include <memory>
-#include <string>
-#include <vector>
-#include <iostream>
+#include <sstream>
 #include <string>
 #include <tuple>
 #include <utility>
 #include <vector>
-#include <string>
-#include <sstream>
 
 #define RDSCOM_VERSION "0.1.0"
 #define RDSCOM_DEBUG_ENABLED 1
@@ -268,7 +264,7 @@ class DataPrototype {
         return *this;
     }
 
-    DataPrototype addField(const std::string &name, DataFieldType type) {
+    DataPrototype &addField(const std::string &name, DataFieldType type) {
         _fields[name] = DataField(_size, type);
         _size += _fields[name].size();
         return *this;
@@ -409,16 +405,16 @@ class DataBuffer {
  *
  *========================================================================**/
 
-enum MessageType {
+enum MessageType : std::uint8_t {
     REQUEST,
     RESPONSE,
     ERROR,
 };
 
 typedef struct MessageHeader {
-    MessageType type;
-    std::uint8_t prototypeHandle;
-    std::uint16_t messageNumber;
+    MessageType type; // 1 byte
+    std::uint8_t prototypeHandle; // 1 byte
+    std::uint16_t messageNumber; // 2 bytes
 
     MessageHeader() : type(MessageType::REQUEST), prototypeHandle(0), messageNumber(0) {}
     MessageHeader(MessageType type, std::uint8_t prototypeHandle, std::uint16_t messageNumber)
@@ -442,7 +438,7 @@ typedef struct MessageHeader {
         serialized.push_back(static_cast<std::uint8_t>(type));
         serialized.push_back(prototypeHandle);
         serialized.push_back(static_cast<std::uint8_t>(messageNumber >> 8));
-        serialized.push_back(static_cast<std::uint8_t>(messageNumber & 0xFF));
+        serialized.push_back(static_cast<std::uint8_t>(messageNumber));
     }
 
 } MessageHeader;
@@ -496,17 +492,16 @@ class Message {
         MessageHeader header = headerRes.value();
 
         // now check that the payload is the correct size
-        std::size_t expectedSize = Message::_preambleSize + Message::_completeHeaderSize + proto.size() + Message::_endSequenceSize;
+        std::size_t expectedSize = Message::_completeHeaderSize + proto.size() + Message::_completeEndSequenceSize;
         if (serialized.size() != expectedSize) {
             std::stringstream ss;
             ss << "Message size mismatch, expected: " << expectedSize << ", got: " << serialized.size();
             return Result<Message>::errorResult(ss.str());
         }
 
+        std::vector<std::uint8_t> data = std::vector<std::uint8_t>(serialized.begin() + Message::_completeHeaderSize, serialized.end() - Message::_completeEndSequenceSize);
 
-        Result<DataBuffer> bufferRes = DataBuffer::createFromPrototype(proto, std::vector<std::uint8_t>(
-                                                                                  serialized.begin() + 1,
-                                                                                  serialized.end() - Message::_endSequenceSize));
+        Result<DataBuffer> bufferRes = DataBuffer::createFromPrototype(proto, data);
 
         if (bufferRes.isError()) {
             return Result<Message>::errorResult("Failed to create data buffer");
@@ -582,11 +577,11 @@ class Message {
 
 std::uint8_t Message::_preamble[3] = {(std::uint8_t)'R', (std::uint8_t)'D', (std::uint8_t)'S'};
 std::size_t Message::_preambleSize = 3;
-std::size_t Message::_completeHeaderSize = sizeof(Message::_preamble) + sizeof(MessageHeader);
+std::size_t Message::_completeHeaderSize = Message::_preambleSize + sizeof(MessageHeader);
 std::uint16_t Message::_messageNumber = 0;
 std::uint8_t Message::_endSequence[3] = {(std::uint8_t)'E', (std::uint8_t)'N', (std::uint8_t)'D'};
 std::size_t Message::_endSequenceSize = 3;
-std::size_t Message::_completeEndSequenceSize = sizeof(Message::_endSequence);
+std::size_t Message::_completeEndSequenceSize = Message::_endSequenceSize;
 
 /**========================================================================
  *                       COMMUNICATION CHANNELS
