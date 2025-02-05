@@ -7,8 +7,8 @@
 
 using namespace rdscom;
 
-#define MESSAGE_TYPE_PERSON
-#define MESSAGE_TYPE_CAR
+#define MESSAGE_TYPE_PERSON 0
+#define MESSAGE_TYPE_CAR 1
 
 class DummyChannel : public CommunicationChannel {
    public:
@@ -32,17 +32,17 @@ void onCarMessage(const rdscom::Message &message) {
     message.printClean(std::cout);
 }
 
-int main() {
-    CommunicationChannel &channel = DummyChannel();
-    CommunicationInterface com(channel);
+DummyChannel g_channel;
+CommunicationInterface g_com(g_channel);
 
-    com.addPrototype(
+int main() {
+    g_com.addPrototype(
            DataPrototype(MESSAGE_TYPE_PERSON)
                .addField("id", DataFieldType::INT8)
                .addField("name", DataFieldType::BYTE)
                .addField("age", DataFieldType::UINT8))
         .addPrototype(
-            DataPrototype(1)
+            DataPrototype(MESSAGE_TYPE_CAR)
                 .addField("make", DataFieldType::BYTE)
                 .addField("model", DataFieldType::BYTE)
                 .addField("year", DataFieldType::UINT16));

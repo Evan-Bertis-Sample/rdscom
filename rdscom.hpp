@@ -121,7 +121,8 @@ std::function<void(const char *)> defaultErrorCallback(std::ostream &stream) {
 #define RDSCOM_COLOR_PURPLE "\033[95m"
 #define RDSCOM_COLOR_RETURN "\033[0m"
 #define RDSCOM_LINE __LINE__
-#define RDS_STRINGIFY(x) #x
+#define RDS_STRINGIFY_HELPER(x) #x
+#define RDS_STRINGIFY(x) RDS_STRINGIFY_HELPER(x)
 
 #define RDSCOM_PREFIX RDSCOM_COLOR_PURPLE "[rdscom:" RDS_STRINGIFY(RDSCOM_LINE) "] " RDSCOM_COLOR_RETURN
 
@@ -807,7 +808,7 @@ class CommunicationInterface {
     CommunicationInterface &addPrototype(const DataPrototype &proto) {
         std::uint8_t handle = proto.identifier();
         if (handle == RESERVED_ERROR_PROTOTYPE) {
-            RDSCOM_DEBUG_PRINT_ERRORLN("Invalid prototype");
+            RDSCOM_DEBUG_PRINT_ERRORLN("Invalid prototype please make sure to pass in a number to the DataPrototype constructor and do not use the identifier %d\n", RESERVED_ERROR_PROTOTYPE);
             return *this;
         }
         _prototypes[handle] = proto;
@@ -848,8 +849,6 @@ class CommunicationInterface {
                 return _txCallbacks;
             case MessageType::ERROR:
                 return _errCallbacks;
-            default:
-                return CallBackMap();
         }
     }
 
