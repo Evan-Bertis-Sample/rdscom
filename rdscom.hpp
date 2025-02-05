@@ -186,7 +186,10 @@ struct DataField {
     DataField(const DataField &other)
         : offset(other.offset), type(other.type) {}
 
-    std::size_t size() const {
+    /// @brief Gets the size of a DataFieldType in bytes
+    /// @param type The type to get the size of
+    /// @return The size of the type in bytes
+    static std::size_t getSizeOfType(DataFieldType type) {
         switch (type) {
             case DataFieldType::UINT8:
             case DataFieldType::INT8:
@@ -208,6 +211,16 @@ struct DataField {
                 return 0;
         }
     }
+
+    /// @brief Gets the size of this DataField in bytes
+    /// @return The size of the DataField in bytes
+    std::size_t size() const {
+        return DataField::getSizeOfType(type);
+    }
+
+    //
+    // * Operators
+    //
 
     DataField &operator=(const DataField &other) {
         offset = other.offset;
@@ -237,53 +250,46 @@ class DataPrototype {
           _size(other._size),
           _fields(other._fields) {}
 
-    DataPrototype(std::vector<std::uint8_t> serialized) {
-        _identifier = static_cast<std::uint8_t>(serialized[0]);
-        std::size_t index = 1;
-        std::size_t numFields = static_cast<std::size_t>(serialized[index]);
-        index++;
+    /// @brief Creates a DataPrototype from a serialized format
+    /// @param serialized A vector of bytes that represents the serialized format
+    /// @return A result with the DataPrototype if successful, or an error message
+    static Result<DataPrototype> fromSerializedFormat(std::vector<std::uint8_t> serialized) {
+        DataPrototype proto;
+        if (serialized.size() < 2) {
+            return Result<DataPrototype>::errorResult("Serialized data too short");
+        }
+
+        proto._identifier = serialized[0];
+        std::size_t numFields = serialized[1];
+        std::size_t offset = 2;
+
         for (std::size_t i = 0; i < numFields; i++) {
-            std::size_t nameSize = static_cast<std::size_t>(serialized[index]);
-            index++;
-            std::string name;
-            for (std::size_t j = 0; j < nameSize; j++) {
-                name.push_back(static_cast<char>(serialized[index]));
-                index++;
+            if (offset + 1 >= serialized.size()) {
+                return Result<DataPrototype>::errorResult("Serialized data too short");
             }
-            DataFieldType type = static_cast<DataFieldType>(serialized[index]);
-            index++;
-            _fields[name] = DataField(_size, type);
-            _size += _fields[name].size();
+
+            std::size_t nameSize = serialized[offset];
+            offset++;
+
+            if (offset + nameSize + 1 >= serialized.size()) {
+                return Result<DataPrototype>::errorResult("Serialized data too short");
+            }
+
+            std::string name(serialized.begin() + offset, serialized.begin() + offset + nameSize);
+            offset += nameSize;
+
+            DataFieldType type = static_cast<DataFieldType>(serialized[offset]);
+            offset++;
+
+            proto._fields[name] = DataField(proto._size, type);
+            proto._size += proto._fields[name].size();
         }
+
+        return Result<DataPrototype>::ok(proto);
     }
 
-    DataPrototype &operator=(const DataPrototype &other) {
-        _identifier = other._identifier;
-        _size = other._size;
-        _fields = other._fields;
-        return *this;
-    }
-
-    DataPrototype &addField(const std::string &name, DataFieldType type) {
-        _fields[name] = DataField(_size, type);
-        _size += _fields[name].size();
-        return *this;
-    }
-
-    Result<DataField> findField(const std::string &name) const {
-        auto it = _fields.find(name);
-        if (it == _fields.end()) {
-            std::string errorMessage = "Field not found: ";
-            errorMessage += name;
-            return Result<DataField>::errorResult(errorMessage);
-        }
-        return Result<DataField>::ok(it->second);
-    }
-
-    std::size_t size() const { return _size; }
-    std::size_t numFields() const { return _fields.size(); }
-    std::uint8_t identifier() const { return _identifier; }
-
+    /// @brief Serializes the DataPrototype into a vector of bytes
+    /// @return A vector of bytes that represents the serialized format
     std::vector<std::uint8_t> serializeFormat() const {
         std::vector<std::uint8_t> serialized;
         serialized.push_back(static_cast<std::uint8_t>(_identifier));
@@ -296,9 +302,63 @@ class DataPrototype {
         return serialized;
     }
 
+    /// @brief Adds a field to the DataPrototype
+    /// @param name The name of the field, it will overwrite if it already exists
+    /// @param type The type of the field
+    /// @return A reference to the DataPrototype
+    DataPrototype &addField(const std::string &name, DataFieldType type) {
+        if (_fields.find(name) != _fields.end()) {
+            _size -= _fields[name].size();
+        }
+        _fields[name] = DataField(_size, type);
+        _size += _fields[name].size();
+        return *this;
+    }
+
+    /// @brief Finds a field in the DataPrototype
+    /// @param name The name of the field to find
+    /// @return A Result with the DataField if successful, or an error message
+    Result<DataField> findField(const std::string &name) const {
+        auto it = _fields.find(name);
+        if (it == _fields.end()) {
+            std::string errorMessage = "Field not found: ";
+            errorMessage += name;
+            return Result<DataField>::errorResult(errorMessage);
+        }
+        return Result<DataField>::ok(it->second);
+    }
+
+    /// @brief Returns the size of the DataPrototype in bytes
+    /// @return The size of the DataPrototype in bytes
+    std::size_t size() const { return _size; }
+
+    /// @brief Returns the number of fields in the DataPrototype
+    /// @return The number of fields in the DataPrototype
+    std::size_t numFields() const { return _fields.size(); }
+
+    /// @brief Returns the identifier of the DataPrototype
+    /// @return The identifier of the DataPrototype, which is used in messages
+    std::uint8_t identifier() const { return _identifier; }
+
+    //
+    // * Operators
+    //
+
+    DataPrototype &operator=(const DataPrototype &other) {
+        _identifier = other._identifier;
+        _size = other._size;
+        _fields = other._fields;
+        return *this;
+    }
+
    private:
+    // The identifier is used in messages to identify the prototype
     std::uint8_t _identifier = 0;
+
+    // The size of the DataPrototype in bytes
     std::size_t _size = 0;
+
+    // The fields in the DataPrototype
     std::map<std::string, DataField> _fields;  // field name -> field
 };
 
@@ -315,6 +375,10 @@ class DataBuffer {
 
     DataBuffer(const DataBuffer &other) : _type(other._type), _data(other._data) {}
 
+    /// @brief Creates a DataBuffer from a prototype and data
+    /// @param type The prototype to create the DataBuffer from
+    /// @param data The data to put in the DataBuffer
+    /// @return A Result with the DataBuffer if successful, or an error message
     static Result<DataBuffer> createFromPrototype(const DataPrototype &type, std::vector<std::uint8_t> data) {
         if (type.identifier() == RESERVED_ERROR_PROTOTYPE) {
             std::string errorMessage = "Invalid prototype: ";
@@ -335,12 +399,10 @@ class DataBuffer {
         return Result<DataBuffer>::ok(buffer);
     }
 
-    DataBuffer &operator=(const DataBuffer &other) {
-        _type = other._type;
-        _data = other._data;
-        return *this;
-    }
-
+    /// @brief Tries to get a field from the DataBuffer
+    /// @tparam T The C++ type to interpret the field as
+    /// @param name The name of the field to get
+    /// @return A Result with the field if successful, or an error message
     template <typename T>
     Result<T> getField(const std::string &name) const {
         static_assert(std::is_arithmetic<T>::value, "getField only supports arithmetic types and std::uint8_t");
@@ -364,6 +426,11 @@ class DataBuffer {
         return Result<T>::ok(value);
     }
 
+    /// @brief Attempts to set a field in the DataBuffer
+    /// @tparam T The C++ type to interpret the field as
+    /// @param name The name of the field to set
+    /// @param value The value to set the field to
+    /// @return A Result with the value if successful, or an error message
     template <typename T>
     Result<T> setField(const std::string &name, T value) {
         static_assert(std::is_arithmetic<T>::value, "setField only supports arithmetic types and std::uint8_t");
@@ -386,12 +453,33 @@ class DataBuffer {
         return Result<T>::ok(value);
     }
 
+    /// @brief Gets the raw data in the DataBuffer
+    /// @return A copy of the raw data in the DataBuffer
     std::vector<std::uint8_t> data() const { return _data; }
+
+    /// @brief Returns the size of the DataBuffer in bytes
+    /// @return The size of the DataBuffer in bytes
     std::size_t size() const { return _data.size(); }
+
+    /// @brief Returns the DataPrototype of the DataBuffer
+    /// @return The DataPrototype of the DataBuffer
     DataPrototype type() const { return _type; }
 
+    //
+    // * Operators
+    //
+
+    DataBuffer &operator=(const DataBuffer &other) {
+        _type = other._type;
+        _data = other._data;
+        return *this;
+    }
+
    private:
+    /// @brief The DataPrototype that describes the format of the data
     DataPrototype _type;
+
+    /// @brief The raw data in the DataBuffer
     std::vector<std::uint8_t> _data;
 };
 
@@ -405,21 +493,34 @@ class DataBuffer {
  *
  *========================================================================**/
 
+/// @brief Enum for the different types of messages
 enum MessageType : std::uint8_t {
+    /// @brief A request message, akin to a GET request in HTTP
     REQUEST,
+    /// @brief A response message, akin to a POST request in HTTP
     RESPONSE,
+    /// @brief An error message, akin to a 500
     ERROR,
 };
 
-typedef struct MessageHeader {
-    MessageType type; // 1 byte
-    std::uint8_t prototypeHandle; // 1 byte
-    std::uint16_t messageNumber; // 2 bytes
+/// @brief A struct for containing meta information about a message
+struct MessageHeader {
+    /// @brief The type of the message
+    MessageType type;  // 1 byte
+
+    /// @brief The prototype handle of the message, used for looking up the prototype
+    std::uint8_t prototypeHandle;  // 1 byte
+
+    /// @brief The message number of the message, used for identifying the message
+    std::uint16_t messageNumber;  // 2 bytes
 
     MessageHeader() : type(MessageType::REQUEST), prototypeHandle(0), messageNumber(0) {}
     MessageHeader(MessageType type, std::uint8_t prototypeHandle, std::uint16_t messageNumber)
         : type(type), prototypeHandle(prototypeHandle), messageNumber(messageNumber) {}
 
+    /// @brief Takes a serialized message header and creates a MessageHeader
+    /// @param serialized The serialized message header
+    /// @return The MessageHeader if successful, or an error message
     static Result<MessageHeader> fromSerialized(const std::vector<std::uint8_t> &serialized) {
         if (serialized.size() < 4) {
             std::string errorMessage = "Message too short: ";
@@ -434,15 +535,18 @@ typedef struct MessageHeader {
         return Result<MessageHeader>::ok(MessageHeader(type, prototypeHandle, messageNumber));
     }
 
+    /// @brief Inserts the serialized message header into a vector
+    /// @param serialized The vector to insert the serialized message header into
     void insertSerialized(std::vector<std::uint8_t> &serialized) const {
         serialized.push_back(static_cast<std::uint8_t>(type));
         serialized.push_back(prototypeHandle);
         serialized.push_back(static_cast<std::uint8_t>(messageNumber >> 8));
         serialized.push_back(static_cast<std::uint8_t>(messageNumber));
     }
+};
 
-} MessageHeader;
-
+/// @brief A representation of a message, which is sent over a communication channel
+/// @note Contains a header and a DataBuffer, which holds the data
 class Message {
    public:
     Message() : _header(MessageHeader()), _buffer(DataBuffer()) {}
@@ -451,12 +555,9 @@ class Message {
     Message(MessageType type, const DataBuffer &data) : _header(MessageHeader(type, data.type().identifier(), _messageNumber++)), _buffer(data) {}
     Message(MessageType type, const DataPrototype &proto) : _header(MessageHeader(type, proto.identifier(), _messageNumber++)), _buffer(DataBuffer(proto)) {}
 
-    bool operator==(const Message &other) const {
-        return _header.type == other._header.type && _header.prototypeHandle == other._header.prototypeHandle && _header.messageNumber == other._header.messageNumber && _buffer.data() == other._buffer.data();
-    }
-
-    bool operator!=(const Message &other) const { return !(*this == other); }
-
+    /// @brief Gets the prototype handle from a serialized message
+    /// @param serialized The serialized message
+    /// @return The prototype handle if successful, or an error message
     static std::uint8_t getPrototypeHandleFromBuffer(const std::vector<std::uint8_t> &serialized) {
         if (serialized.size() <= Message::_preambleSize) {
             return RESERVED_ERROR_PROTOTYPE;
@@ -465,6 +566,10 @@ class Message {
         return serialized[Message::_preambleSize];
     }
 
+    /// @brief Creates a message from a serialized format
+    /// @param proto The prototype to create the message from
+    /// @param serialized The serialized message
+    /// @return The message if successful, or an error message
     static Result<Message> fromSerialized(const DataPrototype &proto, const std::vector<std::uint8_t> &serialized) {
         if (proto.identifier() == RESERVED_ERROR_PROTOTYPE) {
             return Result<Message>::errorResult("Invalid prototype");
@@ -513,23 +618,11 @@ class Message {
             return Result<Message>::errorResult("Failed to create data buffer");
         }
 
-
         return Result<Message>::ok(Message(header, bufferRes.value()));
     }
 
-    MessageType type() const { return _header.type; }
-    DataBuffer &data() { return _buffer; }
-
-    template <typename T>
-    Result<T> getField(const std::string &name) const {
-        return _buffer.getField<T>(name);
-    }
-
-    template <typename T>
-    Result<T> setField(const std::string &name, T value) {
-        return _buffer.setField(name, value);
-    }
-
+    /// @brief Serializes the message into a vector of bytes
+    /// @return A vector of bytes that represents the serialized message
     std::vector<std::uint8_t> serialize() const {
         std::vector<std::uint8_t> serialized;
         serialized.insert(serialized.end(), Message::_preamble, Message::_preamble + Message::_preambleSize);
@@ -540,6 +633,35 @@ class Message {
         return serialized;
     }
 
+    /// @brief Gets a field from the DataBuffer in the message
+    /// @tparam T The C++ type to interpret the field as
+    /// @param name The name of the field to get
+    /// @return The field if successful, or an error message
+    template <typename T>
+    Result<T> getField(const std::string &name) const {
+        return _buffer.getField<T>(name);
+    }
+
+    /// @brief The same as getField, but sets the field instead
+    /// @tparam T The C++ type to interpret the field as
+    /// @param name The name of the field to set
+    /// @param value The value to set the field to
+    /// @return A Result with the value if successful, or an error message
+    template <typename T>
+    Result<T> setField(const std::string &name, T value) {
+        return _buffer.setField(name, value);
+    }
+
+    /// @brief Returns the type of the message (REQUEST, RESPONSE, ERROR)
+    /// @return The type of the message
+    MessageType type() const { return _header.type; }
+
+    /// @brief Returns a reference to the DataBuffer in the message
+    /// @return The DataBuffer in the message
+    DataBuffer &data() { return _buffer; }
+
+    /// @brief Prints the message to an output stream
+    /// @param output The output stream to print the message to
     void printClean(std::ostream &output) const {
         std::vector<std::uint8_t> serialized = serialize();
         output << "Message: \n";
@@ -567,6 +689,16 @@ class Message {
         }
         output << "\n";
     }
+
+    //
+    // * Operators
+    //
+
+    bool operator==(const Message &other) const {
+        return _header.type == other._header.type && _header.prototypeHandle == other._header.prototypeHandle && _header.messageNumber == other._header.messageNumber && _buffer.data() == other._buffer.data();
+    }
+
+    bool operator!=(const Message &other) const { return !(*this == other); }
 
    private:
     MessageHeader _header;
