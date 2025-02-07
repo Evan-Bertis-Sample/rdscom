@@ -719,14 +719,15 @@ class Message {
         output << "\n";
         output << "  Header: ";
         output << "    ";
-        for (std::size_t i = 0; i < _completeHeaderSize; i++) {
-            output << static_cast<char>(serialized[i + _preambleSize]);
+        for (std::size_t i = 0; i < _completeHeaderSize - _preambleSize; i++) {
+            // print as hex
+            output << std::hex << static_cast<int>(serialized[i + _preambleSize]) << " ";
         }
         output << "\n";
 
         output << "  Data: ";
         for (std::size_t i = 0; i < _buffer.size(); i++) {
-            output << static_cast<char>(serialized[i + _completeHeaderSize]);
+            output << std::hex << static_cast<int>(serialized[i + _completeHeaderSize]);
         }
         output << "\n";
 
@@ -982,6 +983,13 @@ class CommunicationInterface {
             _acksNeeded[message.messageNumber()] = SentMessage{message, _options.timeFunction(), 0};
         } else if (ackRequired && message.type() == MessageType::RESPONSE) {
             RDSCOM_DEBUG_PRINT_ERRORLN("You cannot require an ack for a response message, as a response is the ack");
+        }
+
+        // call the tx callbacks
+        if (_txCallbacks.find(message.type()) != _txCallbacks.end()) {
+            for (const auto &callback : _txCallbacks[message.type()]) {
+                callback(message);
+            }
         }
     }
 

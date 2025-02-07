@@ -78,22 +78,23 @@ int main() {
 
     g_com.addCallback(
         MESSAGE_TYPE_PERSON,
-        MessageType::REQUEST,
+        MessageType::RESPONSE,
         onPersonMessage
     );
 
     g_com.addCallback(
         MESSAGE_TYPE_CAR,
-        MessageType::RESPONSE,
+        MessageType::REQUEST,
         onCarMessage
     );
 
-    Message msg(MessageType::REQUEST, g_com.getPrototype(MESSAGE_TYPE_PERSON).value());
+    Message msg(MessageType::REQUEST, g_com.getPrototype(MESSAGE_TYPE_CAR).value());
 
     bool error = rdscom::check(
         rdscom::defaultErrorCallback(std::cerr),
-        msg.setField<std::int8_t>("id", 1),
-        msg.setField<std::uint8_t>("age", 30)
+        msg.setField<std::uint8_t>("make", 1),
+        msg.setField<std::uint8_t>("model", 2),
+        msg.setField<std::uint16_t>("year", 2020)
     );
 
     if (error) {
