@@ -330,7 +330,7 @@ def on_person_message(message: Message) -> None:
     res_make = response.set_field("make", 1)
     res_model = response.set_field("model", 2)
     res_year = response.set_field("year", 2020)
-    if check(default_error_callback(sys.stderr), res_make, res_model, res_year):
+    if Result.check(default_error_callback(sys.stderr), res_make, res_model, res_year):
         print("Error setting fields", file=sys.stderr)
         return
 
@@ -353,7 +353,7 @@ def on_car_message(message: Message) -> None:
                                         .add_field("age", DataFieldType.UINT8))
     res_id = response.set_field("id", 1)
     res_age = response.set_field("age", 30)
-    if check(default_error_callback(sys.stderr), res_id, res_age):
+    if Result.check(default_error_callback(sys.stderr), res_id, res_age):
         print("Error setting fields", file=sys.stderr)
         return
 
@@ -387,7 +387,7 @@ def main() -> int:
     res_make = msg.set_field("make", 1)
     res_model = msg.set_field("model", 2)
     res_year = msg.set_field("year", 2020)
-    if check(default_error_callback(sys.stderr), res_make, res_model, res_year):
+    if Result.check(default_error_callback(sys.stderr), res_make, res_model, res_year):
         print("Error setting fields", file=sys.stderr)
         return 1
 
@@ -405,11 +405,7 @@ if __name__ == "__main__":
     sys.exit(main())
 ```
 
----
 
-## Contributing
-
-Contributions are welcome! Feel free to open issues or submit pull requests with improvements, bug fixes, or new features.
 
 
 ## License
