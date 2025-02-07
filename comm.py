@@ -40,10 +40,10 @@ def current_millis() -> int:
     return int(time.time() * 1000)
 
 # Create options using the number of retries, the retry delay, and our time function.
-options = CommunicationInterfaceOptions(NUM_RETRIES, RETRY_DELAY, current_millis)
+g_options = CommunicationInterfaceOptions(NUM_RETRIES, RETRY_DELAY, current_millis)
 
 # Create the communication interface.
-g_com = CommunicationInterface(g_channel, options)
+g_com = CommunicationInterface(g_channel, g_options)
 
 # ---------------------------------------------------------------------------
 #                           CALLBACKS

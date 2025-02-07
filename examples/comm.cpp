@@ -15,12 +15,12 @@ using namespace rdscom;
 #define RETRY_DELAY 2000
 
 DummyChannel g_channel;
-CommunicationInterfaceOptions options {
+CommunicationInterfaceOptions g_options {
     NUM_RETRIES, RETRY_DELAY,
     []() -> std::uint32_t { return std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::high_resolution_clock::now().time_since_epoch()).count(); }
 };
 
-CommunicationInterface g_com(g_channel, options);
+CommunicationInterface g_com(g_channel, g_options);
 
 void onPersonMessage(const rdscom::Message &message) {
     std::cout << "Received person message\n";
