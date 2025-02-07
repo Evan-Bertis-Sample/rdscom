@@ -18,8 +18,7 @@ void onPersonMessage(const rdscom::Message &message) {
     std::cout << "Received person message\n";
     message.printClean(std::cout);
 
-    // send a response, of type car
-    Message response(MessageType::RESPONSE, g_com.getPrototype(MESSAGE_TYPE_CAR).value());
+    Message response(MessageType::REQUEST, g_com.getPrototype(MESSAGE_TYPE_CAR).value());
     bool check = rdscom::check(
         rdscom::defaultErrorCallback(std::cerr),
         response.setField<std::uint8_t>("make", 1),
@@ -40,7 +39,7 @@ void onCarMessage(const rdscom::Message &message) {
     message.printClean(std::cout);
 
     // send a response, of type person
-    Message response(MessageType::RESPONSE, g_com.getPrototype(MESSAGE_TYPE_PERSON).value());
+    Message response = Message::createResponse(message, g_com.getPrototype(MESSAGE_TYPE_PERSON).value());
 
     bool check = rdscom::check(
         rdscom::defaultErrorCallback(std::cerr),

@@ -561,9 +561,42 @@ class Message {
    public:
     Message() : _header(MessageHeader()), _buffer(DataBuffer()) {}
     Message(const Message &other) : _header(other._header), _buffer(other._buffer) {}
-    Message(const MessageHeader &header, const DataBuffer &data) : _header(header), _buffer(data) {}
-    Message(MessageType type, const DataBuffer &data) : _header(MessageHeader(type, data.type().identifier(), _messageNumber++)), _buffer(data) {}
-    Message(MessageType type, const DataPrototype &proto) : _header(MessageHeader(type, proto.identifier(), _messageNumber++)), _buffer(DataBuffer(proto)) {}
+
+    Message(const MessageHeader &header, const DataBuffer &data) : _header(header), _buffer(data) {
+        serveMessageConstructorWarnings(data.type().identifier(), header.type);
+    }
+
+    Message(MessageType type, const DataBuffer &data) : _header(MessageHeader(type, data.type().identifier(), _messageNumber++)), _buffer(data) {
+        serveMessageConstructorWarnings(data.type().identifier(), type);
+    }
+
+    Message(MessageType type, const DataPrototype &proto) : _header(MessageHeader(type, proto.identifier(), _messageNumber++)), _buffer(DataBuffer(proto)) {
+        serveMessageConstructorWarnings(proto.identifier(), type);
+    }
+
+    Message(MessageType type, const DataPrototype &proto, std::uint16_t messageNumber) : _header(MessageHeader(type, proto.identifier(), messageNumber)), _buffer(DataBuffer(proto)) {
+        serveMessageConstructorWarnings(proto.identifier(), type);
+    }
+
+    Message(MessageType type, const DataBuffer &data, std::uint16_t messageNumber) : _header(MessageHeader(type, data.type().identifier(), messageNumber)), _buffer(data) {
+        serveMessageConstructorWarnings(data.type().identifier(), type);
+    }
+
+    /// @brief Creates a response message from a request message and data
+    /// @param request The request message to respond to
+    /// @param data The DataBuffer to put in the response
+    /// @return The response message
+    static Message createResponse(const Message &request, const DataBuffer &data) {
+        return Message(MessageType::RESPONSE, data, request._header.messageNumber);
+    }
+
+    /// @brief Creates a response message from a request message and prototype
+    /// @param request The request message to respond to
+    /// @param proto The prototype to create the response from
+    /// @return The response message
+    static Message createResposne(const Message &request, const DataPrototype &proto) {
+        return Message(MessageType::RESPONSE, proto, request._header.messageNumber);
+    }
 
     /// @brief Gets the prototype handle from a serialized message
     /// @param serialized The serialized message
@@ -721,6 +754,19 @@ class Message {
     static std::uint8_t _endSequence[3];
     static std::size_t _endSequenceSize;
     static std::size_t _completeEndSequenceSize;
+
+    /// @brief Prints warnings for message constructors, as they can be dangerous
+    /// @param prototypeIdentifier The identifier of the prototype in the message
+    /// @param type The type of the message
+    void serveMessageConstructorWarnings(std::uint8_t prototypeIdentifier, MessageType type) {
+        if (prototypeIdentifier == RESERVED_ERROR_PROTOTYPE) {
+            RDSCOM_DEBUG_PRINT_ERRORLN("Invalid prototype please make sure to pass in a number to the DataPrototype constructor and do not use the identifier %d\n", RESERVED_ERROR_PROTOTYPE);
+        }
+
+        if (type == MessageType::RESPONSE) {
+            RDSCOM_DEBUG_PRINT_ERRORLN("Creating a response message, this is not recommended, as it is not clear what the response is to. Please use the Message::Response() builder instead\n");
+        }
+    }
 };
 
 std::uint8_t Message::_preamble[3] = {(std::uint8_t)'R', (std::uint8_t)'D', (std::uint8_t)'S'};
@@ -778,7 +824,7 @@ class SerialCommunicationChannel : public CommunicationChannel {
 
 class DummyChannel : public CommunicationChannel {
    public:
-    std::vector<std::uint8_t> receive() override { 
+    std::vector<std::uint8_t> receive() override {
         if (_data.empty()) {
             return {};
         }
