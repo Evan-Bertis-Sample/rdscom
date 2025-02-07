@@ -124,7 +124,7 @@ std::function<void(const char *)> defaultErrorCallback(std::ostream &stream) {
 #define RDS_STRINGIFY_HELPER(x) #x
 #define RDS_STRINGIFY(x) RDS_STRINGIFY_HELPER(x)
 
-#define RDSCOM_PREFIX RDSCOM_COLOR_PURPLE "[rdscom:" RDS_STRINGIFY(RDSCOM_LINE) "] " RDSCOM_COLOR_RETURN
+#define RDSCOM_PREFIX RDSCOM_COLOR_PURPLE "[rdscom.hpp:" RDS_STRINGIFY(RDSCOM_LINE) "] " RDSCOM_COLOR_RETURN
 
 #define RDSCOM_DEBUG_PRINT(fmt, ...) \
     fprintf(stdout, RDSCOM_PREFIX fmt, ##__VA_ARGS__)
@@ -872,10 +872,10 @@ typedef std::map<std::uint8_t, CallBackList> CallBackMap;
 class CommunicationInterfaceOptions {
    public:
     std::uint8_t maxRetries = 3;
-    std::uint64_t retryTimeout = 1000;
-    std::function<std::uint64_t()> timeFunction;
+    std::uint32_t retryTimeout = 1000;
+    std::function<std::uint32_t()> timeFunction;
 
-    CommunicationInterfaceOptions(std::uint8_t maxRetries, std::uint32_t retryTimeout, std::function<std::uint64_t()> timeFunction) : maxRetries(maxRetries), retryTimeout(retryTimeout), timeFunction(timeFunction) {}
+    CommunicationInterfaceOptions(std::uint8_t maxRetries, std::uint32_t retryTimeout, std::function<std::uint32_t()> timeFunction) : maxRetries(maxRetries), retryTimeout(retryTimeout), timeFunction(timeFunction) {}
     CommunicationInterfaceOptions() : maxRetries(3), retryTimeout(1000), timeFunction([]() { 
         RDSCOM_DEBUG_PRINT_ERRORLN("No time function set for CommunicationInterfaceOptions, please set a time function");
         return 0; }) {}
@@ -914,11 +914,15 @@ class CommunicationInterface {
     void tick() {
         listen();
         // now check for acks
-        std::vector<std::uint16_t> toRemove(_acksNeeded.size());
+        std::vector<std::uint16_t> toRemove;
         for (auto &ack : _acksNeeded) {
             SentMessage &message = ack.second;
-            if (_options.timeFunction() - message.timeSent > _options.retryTimeout) {
+            // do we need to retry?
+            std::uint32_t timeSinceSent = _options.timeFunction() - message.timeSent;
+            if (timeSinceSent > _options.retryTimeout) {
                 if (message.numRetries < _options.maxRetries) {
+                    // send this guy again
+                    RDSCOM_DEBUG_PRINTLN("Retrying message number %d after %d ms", ack.first, timeSinceSent);
                     sendMessage(message.message, false);
                     message.timeSent = _options.timeFunction();
                     message.numRetries++;
@@ -975,7 +979,7 @@ class CommunicationInterface {
         _channel.send(message);
 
         if (ackRequired && message.type() == MessageType::REQUEST) {
-            _acksNeeded[message.messageNumber()] = SentMessage{message, 0, 0};
+            _acksNeeded[message.messageNumber()] = SentMessage{message, _options.timeFunction(), 0};
         } else if (ackRequired && message.type() == MessageType::RESPONSE) {
             RDSCOM_DEBUG_PRINT_ERRORLN("You cannot require an ack for a response message, as a response is the ack");
         }
@@ -990,7 +994,7 @@ class CommunicationInterface {
         return Result<DataPrototype>::ok(_prototypes[identifier]);
     }
 
-    std::uint64_t timeSinceLastRecieved() const { return _options.timeFunction() - _lastMessageTime; }
+    std::uint32_t timeSinceLastRecieved() const { return _options.timeFunction() - _lastMessageTime; }
 
    private:
     struct SentMessage {
@@ -1017,7 +1021,7 @@ class CommunicationInterface {
     CallBackMap _rxCallbacks;
     CallBackMap _txCallbacks;
     CallBackMap _errCallbacks;
-    std::uint64_t _lastMessageTime = 0;
+    std::uint32_t _lastMessageTime = 0;
 
     std::map<std::uint8_t, DataPrototype> _prototypes;
     std::map<std::uint16_t, CommunicationInterface::SentMessage> _acksNeeded;  // message number -> message

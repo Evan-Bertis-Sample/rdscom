@@ -11,10 +11,13 @@ using namespace rdscom;
 #define MESSAGE_TYPE_PERSON 0
 #define MESSAGE_TYPE_CAR 1
 
+#define NUM_RETRIES 3
+#define RETRY_DELAY 2000
+
 DummyChannel g_channel;
 CommunicationInterfaceOptions options {
-    3, 100,
-    []() -> std::uint64_t { return std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::high_resolution_clock::now().time_since_epoch()).count(); }
+    NUM_RETRIES, RETRY_DELAY,
+    []() -> std::uint32_t { return std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::high_resolution_clock::now().time_since_epoch()).count(); }
 };
 
 CommunicationInterface g_com(g_channel, options);
@@ -108,7 +111,7 @@ int main() {
         while (std::chrono::duration_cast<std::chrono::seconds>(std::chrono::high_resolution_clock::now() - start).count() < 1) {
         }
 
-        if (g_com.timeSinceLastRecieved() > 2) {
+        if (g_com.timeSinceLastRecieved() > 2000) {
             std::cerr << "No messages received in 2 seconds -- this shouldn't happen in this program\n";
             return 1;
         }
