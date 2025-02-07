@@ -602,11 +602,19 @@ class Message {
     /// @param serialized The serialized message
     /// @return The prototype handle if successful, or an error message
     static std::uint8_t getPrototypeHandleFromBuffer(const std::vector<std::uint8_t> &serialized) {
-        if (serialized.size() <= Message::_preambleSize) {
+        if (serialized.size() <= Message::_completeHeaderSize) {
             return RESERVED_ERROR_PROTOTYPE;
         }
 
-        return serialized[Message::_preambleSize];
+        // now read the header
+        Result<MessageHeader> headerRes = MessageHeader::fromSerialized(
+            std::vector<std::uint8_t>(serialized.begin() + Message::_preambleSize, serialized.begin() + Message::_preambleSize + 4));
+
+        if (headerRes.isError()) {
+            return RESERVED_ERROR_PROTOTYPE;
+        }
+
+        return headerRes.value().prototypeHandle;
     }
 
     /// @brief Creates a message from a serialized format
@@ -840,6 +848,8 @@ class DummyChannel : public CommunicationChannel {
             return {};
         }
 
+        RDSCOM_DEBUG_PRINTLN("[DummyChannel] Recieved data of size %llu", _data.size());
+
         std::vector<std::uint8_t> data = _data;
         _data.clear();
         return data;
@@ -944,7 +954,7 @@ class CommunicationInterface {
     /// and calls the appropriate callbacks
     /// If you want to handle acks, you should call tick() instead, which calls listen() and handles acks
     void listen() {
-            std::vector<std::uint8_t> data = _channel.receive();
+        std::vector<std::uint8_t> data = _channel.receive();
         if (data.size() == 0) {
             return;
         }
@@ -983,13 +993,6 @@ class CommunicationInterface {
             _acksNeeded[message.messageNumber()] = SentMessage{message, _options.timeFunction(), 0};
         } else if (ackRequired && message.type() == MessageType::RESPONSE) {
             RDSCOM_DEBUG_PRINT_ERRORLN("You cannot require an ack for a response message, as a response is the ack");
-        }
-
-        // call the tx callbacks
-        if (_txCallbacks.find(message.type()) != _txCallbacks.end()) {
-            for (const auto &callback : _txCallbacks[message.type()]) {
-                callback(message);
-            }
         }
     }
 
