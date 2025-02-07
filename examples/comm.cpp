@@ -38,8 +38,9 @@ void onPersonMessage(const rdscom::Message &message) {
         std::cerr << "Error setting fields\n";
         return;
     }
-
-    g_com.sendMessage(response);
+    
+    // send a response, expecting an ack
+    g_com.sendMessage(response, true);
 }
 
 void onCarMessage(const rdscom::Message &message) {
@@ -102,7 +103,7 @@ int main() {
         return 1;
     }
 
-    g_com.sendMessage(msg);
+    g_com.sendMessage(msg, true);
 
     while (true) {
         g_com.tick();

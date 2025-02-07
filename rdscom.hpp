@@ -562,9 +562,7 @@ class Message {
     Message() : _header(MessageHeader()), _buffer(DataBuffer()) {}
     Message(const Message &other) : _header(other._header), _buffer(other._buffer) {}
 
-    Message(const MessageHeader &header, const DataBuffer &data) : _header(header), _buffer(data) {
-        serveMessageConstructorWarnings(data.type().identifier(), header.type);
-    }
+    Message(const MessageHeader &header, const DataBuffer &data) : _header(header), _buffer(data) {}
 
     Message(MessageType type, const DataBuffer &data) : _header(MessageHeader(type, data.type().identifier(), _messageNumber++)), _buffer(data) {
         serveMessageConstructorWarnings(data.type().identifier(), type);
@@ -587,7 +585,8 @@ class Message {
     /// @param data The DataBuffer to put in the response
     /// @return The response message
     static Message createResponse(const Message &request, const DataBuffer &data) {
-        return Message(MessageType::RESPONSE, data, request._header.messageNumber);
+        MessageHeader header(MessageType::RESPONSE, data.type().identifier(), request._header.messageNumber);
+        return Message(header, data);
     }
 
     /// @brief Creates a response message from a request message and prototype
@@ -595,7 +594,8 @@ class Message {
     /// @param proto The prototype to create the response from
     /// @return The response message
     static Message createResposne(const Message &request, const DataPrototype &proto) {
-        return Message(MessageType::RESPONSE, proto, request._header.messageNumber);
+        MessageHeader header(MessageType::RESPONSE, proto.identifier(), request._header.messageNumber);
+        return Message(header, proto);
     }
 
     /// @brief Gets the prototype handle from a serialized message
@@ -606,15 +606,7 @@ class Message {
             return RESERVED_ERROR_PROTOTYPE;
         }
 
-        // now read the header
-        Result<MessageHeader> headerRes = MessageHeader::fromSerialized(
-            std::vector<std::uint8_t>(serialized.begin() + Message::_preambleSize, serialized.begin() + Message::_preambleSize + 4));
-
-        if (headerRes.isError()) {
-            return RESERVED_ERROR_PROTOTYPE;
-        }
-
-        return headerRes.value().prototypeHandle;
+        return serialized[Message::_preambleSize + 1];
     }
 
     /// @brief Creates a message from a serialized format
@@ -726,7 +718,6 @@ class Message {
         }
         output << "\n";
         output << "  Header: ";
-        output << "    ";
         for (std::size_t i = 0; i < _completeHeaderSize - _preambleSize; i++) {
             // print as hex
             output << std::hex << static_cast<int>(serialized[i + _preambleSize]) << " ";
@@ -735,7 +726,7 @@ class Message {
 
         output << "  Data: ";
         for (std::size_t i = 0; i < _buffer.size(); i++) {
-            output << std::hex << static_cast<int>(serialized[i + _completeHeaderSize]);
+            output << std::hex << static_cast<int>(serialized[i + _completeHeaderSize]) << " ";
         }
         output << "\n";
 
@@ -967,9 +958,9 @@ class CommunicationInterface {
         }
 
         DataPrototype proto = _prototypes[protoHandle];
-        RDSCOM_DEBUG_PRINTLN("Received message of type %d", proto.identifier());
 
         Message message = Message::fromSerialized(proto, data).value();
+        RDSCOM_DEBUG_PRINTLN("Received message of prototype %d, message number %d, message type %d", message.type(), message.messageNumber(), message.type());
         _lastMessageTime = _options.timeFunction();
 
         if (message.type() == MessageType::RESPONSE) {
@@ -978,15 +969,15 @@ class CommunicationInterface {
             }
         }
 
-        if (_rxCallbacks.find(message.type()) != _rxCallbacks.end()) {
-            RDSCOM_DEBUG_PRINTLN("Calling callbacks for message type %d", message.type());
-            for (const auto &callback : _rxCallbacks[message.type()]) {
+        CallBackMap &map = getMap(message.type());
+        if (map.find(protoHandle) != map.end()) {
+            for (auto &callback : map[protoHandle]) {
                 callback(message);
             }
         }
     }
 
-    void sendMessage(const Message &message, bool ackRequired = true) {
+    void sendMessage(const Message &message, bool ackRequired = false) {
         _channel.send(message);
 
         if (ackRequired && message.type() == MessageType::REQUEST) {
