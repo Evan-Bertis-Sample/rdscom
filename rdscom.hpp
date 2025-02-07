@@ -703,6 +703,10 @@ class Message {
     /// @return The DataBuffer in the message
     DataBuffer &data() { return _buffer; }
 
+    /// @brief Returns a const reference to the DataBuffer in the message
+    /// @return The DataBuffer in the message
+    std::uint16_t messageNumber() const { return _header.messageNumber; }
+
     /// @brief Prints the message to an output stream
     /// @param output The output stream to print the message to
     void printClean(std::ostream &output) const {
@@ -736,6 +740,12 @@ class Message {
     //
     // * Operators
     //
+
+    Message &operator=(const Message &other) {
+        _header = other._header;
+        _buffer = other._buffer;
+        return *this;
+    }
 
     bool operator==(const Message &other) const {
         return _header.type == other._header.type && _header.prototypeHandle == other._header.prototypeHandle && _header.messageNumber == other._header.messageNumber && _buffer.data() == other._buffer.data();
@@ -859,9 +869,26 @@ class DummyChannel : public CommunicationChannel {
 typedef std::vector<std::function<void(const Message &message)>> CallBackList;
 typedef std::map<std::uint8_t, CallBackList> CallBackMap;
 
+class CommunicationInterfaceOptions {
+   public:
+    std::uint8_t maxRetries = 3;
+    std::uint64_t retryTimeout = 1000;
+    std::function<std::uint64_t()> timeFunction;
+
+    CommunicationInterfaceOptions(std::uint8_t maxRetries, std::uint32_t retryTimeout, std::function<std::uint64_t()> timeFunction) : maxRetries(maxRetries), retryTimeout(retryTimeout), timeFunction(timeFunction) {}
+    CommunicationInterfaceOptions() : maxRetries(3), retryTimeout(1000), timeFunction([]() { 
+        RDSCOM_DEBUG_PRINT_ERRORLN("No time function set for CommunicationInterfaceOptions, please set a time function");
+        return 0; }) {}
+#ifdef RDSCOM_ARDUINO
+    CommunicationInterfaceOptions(std::uint8_t maxRetries, std::uint32_t retryTimeout) : maxRetries(maxRetries), retryTimeout(retryTimeout), timeFunction(millis) {}
+    CommunicationInterfaceOptions() : maxRetries(3), retryTimeout(1000), timeFunction(millis) {}
+#endif
+};
+
 class CommunicationInterface {
    public:
-    CommunicationInterface(CommunicationChannel &channel) : _channel(channel), _rxCallbacks(), _txCallbacks(), _errCallbacks() {}
+    CommunicationInterface(CommunicationChannel &channel) : _channel(channel), _rxCallbacks(), _txCallbacks(), _errCallbacks(), _options() {}
+    CommunicationInterface(CommunicationChannel &channel, CommunicationInterfaceOptions options) : _channel(channel), _rxCallbacks(), _txCallbacks(), _errCallbacks(), _options(options) {}
 
     CommunicationInterface &addCallback(std::uint8_t type, MessageType msgType, std::function<void(const Message &message)> callback) {
         CallBackMap &map = getMap(msgType);
@@ -882,10 +909,31 @@ class CommunicationInterface {
         return *this;
     }
 
-    void listen() {
-        _ticksSinceLastMessage++;
+    void tick() {
+        listen();
+        // now check for acks
+        std::vector<std::uint16_t> toRemove(_acksNeeded.size());
+        for (auto &ack : _acksNeeded) {
+            SentMessage &message = ack.second;
+            if (_options.timeFunction() - message.timeSent > _options.retryTimeout) {
+                if (message.numRetries < _options.maxRetries) {
+                    sendMessage(message.message, false);
+                    message.timeSent = _options.timeFunction();
+                    message.numRetries++;
+                } else {
+                    toRemove.push_back(ack.first);
+                }
+            }
+        }
 
-        std::vector<std::uint8_t> data = _channel.receive();
+        for (std::uint16_t messageNumber : toRemove) {
+            RDSCOM_DEBUG_PRINTLN("Removing message number %d -- failed to get an ack before the timeout", messageNumber);
+            _acksNeeded.erase(messageNumber);
+        }
+    }
+
+    void listen() {
+            std::vector<std::uint8_t> data = _channel.receive();
         if (data.size() == 0) {
             return;
         }
@@ -901,7 +949,13 @@ class CommunicationInterface {
         RDSCOM_DEBUG_PRINTLN("Received message of type %d", proto.identifier());
 
         Message message = Message::fromSerialized(proto, data).value();
-        _ticksSinceLastMessage = 0;
+        _lastMessageTime = _options.timeFunction();
+
+        if (message.type() == MessageType::RESPONSE) {
+            if (_acksNeeded.find(message.messageNumber()) != _acksNeeded.end()) {
+                _acksNeeded.erase(message.messageNumber());
+            }
+        }
 
         if (_rxCallbacks.find(message.type()) != _rxCallbacks.end()) {
             RDSCOM_DEBUG_PRINTLN("Calling callbacks for message type %d", message.type());
@@ -911,8 +965,14 @@ class CommunicationInterface {
         }
     }
 
-    void sendMessage(const Message &message) {
+    void sendMessage(const Message &message, bool ackRequired = true) {
         _channel.send(message);
+
+        if (ackRequired && message.type() == MessageType::REQUEST) {
+            _acksNeeded[message.messageNumber()] = SentMessage{message, 0, 0};
+        } else if (ackRequired && message.type() == MessageType::RESPONSE) {
+            RDSCOM_DEBUG_PRINT_ERRORLN("You cannot require an ack for a response message, as a response is the ack");
+        }
     }
 
     Result<DataPrototype> getPrototype(std::uint8_t identifier) {
@@ -924,9 +984,15 @@ class CommunicationInterface {
         return Result<DataPrototype>::ok(_prototypes[identifier]);
     }
 
-    std::uint64_t ticksSinceLastMessage() const { return _ticksSinceLastMessage; }
+    std::uint64_t timeSinceLastRecieved() const { return _options.timeFunction() - _lastMessageTime; }
 
    private:
+    struct SentMessage {
+        Message message;
+        std::uint32_t timeSent;
+        std::uint8_t numRetries;
+    };
+
     CallBackMap &getMap(MessageType type) {
         switch (type) {
             case MessageType::REQUEST:
@@ -941,12 +1007,14 @@ class CommunicationInterface {
     }
 
     CommunicationChannel &_channel;
+    CommunicationInterfaceOptions _options;
     CallBackMap _rxCallbacks;
     CallBackMap _txCallbacks;
     CallBackMap _errCallbacks;
-    std::uint64_t _ticksSinceLastMessage = 0;
+    std::uint64_t _lastMessageTime = 0;
 
     std::map<std::uint8_t, DataPrototype> _prototypes;
+    std::map<std::uint16_t, CommunicationInterface::SentMessage> _acksNeeded;  // message number -> message
 };
 
 }  // namespace rdscom

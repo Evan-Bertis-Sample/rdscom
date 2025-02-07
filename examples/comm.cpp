@@ -103,7 +103,7 @@ int main() {
         while (std::chrono::duration_cast<std::chrono::seconds>(std::chrono::high_resolution_clock::now() - start).count() < 1) {
         }
 
-        if (g_com.ticksSinceLastMessage() > 2) {
+        if (g_com.timeSinceLastRecieved() > 2) {
             std::cerr << "No messages received in 2 seconds -- this shouldn't happen in this program\n";
             return 1;
         }
