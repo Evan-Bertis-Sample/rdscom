@@ -312,7 +312,15 @@ class DataPrototype {
     /// @return A reference to the DataPrototype
     DataPrototype &addField(const std::string &name, DataFieldType type) {
         if (_fields.find(name) != _fields.end()) {
-            _size -= _fields[name].size();
+            std::size_t offset = _fields[name].offset;
+            std::size_t size = _fields[name].size();
+            // edit all the fields offsets after this one, that way
+            for (auto &field : _fields) {
+                if (field.second.offset > offset) {
+                    field.second.offset -= size;
+                }
+            }
+            _size -= size;
         }
         _fields[name] = DataField(_size, type);
         _size += _fields[name].size();
