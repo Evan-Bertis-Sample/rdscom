@@ -32,18 +32,14 @@
  *
  *========================================================================**/
 
-#include <cstddef>
-#include <cstdint>
-#include <cstring>
+#include <map>
+#include <vector>
 #include <functional>
 #include <iostream>
-#include <map>
-#include <memory>
 #include <sstream>
-#include <string>
-#include <tuple>
-#include <utility>
-#include <vector>
+#include <cstring>
+#include <initializer_list>
+#include <cstdint>
 
 #define RDSCOM_VERSION "0.1.0"
 #define RDSCOM_DEBUG_ENABLED 1
