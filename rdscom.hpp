@@ -808,34 +808,6 @@ class CommunicationChannel {
     virtual void send(const Message &message) = 0;
 };
 
-#ifdef RDSCOM_ARDUINO  // Arduino specific code
-#include <Arduino.h>
-
-class SerialCommunicationChannel : public CommunicationChannel {
-   public:
-    SerialCommunicationChannel(HardwareSerial &serial) : _serial(serial) {}
-
-    std::vector<std::uint8_t> receive() override {
-        std::vector<std::uint8_t> data;
-        while (_serial.available()) {
-            data.push_back(static_cast<std::uint8_t>(_serial.read()));
-        }
-        return data;
-    }
-
-    void send(const Message &message) override {
-        std::vector<std::uint8_t> serialized = message.serialize();
-        for (std::uint8_t byte : serialized) {
-            _serial.write(byte);
-        }
-    }
-
-   private:
-    HardwareSerial &_serial;
-};
-
-#endif
-
 class DummyChannel : public CommunicationChannel {
    public:
     std::vector<std::uint8_t> receive() override {
