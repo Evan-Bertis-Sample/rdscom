@@ -12,7 +12,12 @@ using namespace rdscom;
 #define MESSAGE_TYPE_CAR 1
 
 DummyChannel g_channel;
-CommunicationInterface g_com(g_channel);
+CommunicationInterfaceOptions options {
+    3, 100,
+    []() -> std::uint64_t { return std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::high_resolution_clock::now().time_since_epoch()).count(); }
+};
+
+CommunicationInterface g_com(g_channel, options);
 
 void onPersonMessage(const rdscom::Message &message) {
     std::cout << "Received person message\n";
@@ -96,7 +101,7 @@ int main() {
     g_com.sendMessage(msg);
 
     while (true) {
-        g_com.listen();
+        g_com.tick();
         // sleep for a bit
         auto start = std::chrono::high_resolution_clock::now();
 

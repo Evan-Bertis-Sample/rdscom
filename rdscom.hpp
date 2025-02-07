@@ -887,8 +887,8 @@ class CommunicationInterfaceOptions {
 
 class CommunicationInterface {
    public:
-    CommunicationInterface(CommunicationChannel &channel) : _channel(channel), _rxCallbacks(), _txCallbacks(), _errCallbacks(), _options() {}
-    CommunicationInterface(CommunicationChannel &channel, CommunicationInterfaceOptions options) : _channel(channel), _rxCallbacks(), _txCallbacks(), _errCallbacks(), _options(options) {}
+    CommunicationInterface(CommunicationChannel &channel) : _channel(channel), _options(), _rxCallbacks(), _txCallbacks(), _errCallbacks() {}
+    CommunicationInterface(CommunicationChannel &channel, CommunicationInterfaceOptions options) : _channel(channel), _options(options), _rxCallbacks(), _txCallbacks(), _errCallbacks() {}
 
     CommunicationInterface &addCallback(std::uint8_t type, MessageType msgType, std::function<void(const Message &message)> callback) {
         CallBackMap &map = getMap(msgType);
@@ -909,6 +909,8 @@ class CommunicationInterface {
         return *this;
     }
 
+    /// @brief Handles all of the logic for the communication interface
+    /// @details This function should be called in the main loop of the program
     void tick() {
         listen();
         // now check for acks
@@ -932,6 +934,10 @@ class CommunicationInterface {
         }
     }
 
+    /// @brief Listens for messages on the communication channel
+    /// @details This function will not handle acks, it literally just listens for messages
+    /// and calls the appropriate callbacks
+    /// If you want to handle acks, you should call tick() instead, which calls listen() and handles acks
     void listen() {
             std::vector<std::uint8_t> data = _channel.receive();
         if (data.size() == 0) {
