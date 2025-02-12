@@ -32,18 +32,14 @@
  *
  *========================================================================**/
 
-#include <cstddef>
-#include <cstdint>
-#include <cstring>
+#include <map>
+#include <vector>
 #include <functional>
 #include <iostream>
-#include <map>
-#include <memory>
 #include <sstream>
-#include <string>
-#include <tuple>
-#include <utility>
-#include <vector>
+#include <cstring>
+#include <initializer_list>
+#include <cstdint>
 
 #define RDSCOM_VERSION "0.1.0"
 #define RDSCOM_DEBUG_ENABLED 1
@@ -316,7 +312,15 @@ class DataPrototype {
     /// @return A reference to the DataPrototype
     DataPrototype &addField(const std::string &name, DataFieldType type) {
         if (_fields.find(name) != _fields.end()) {
-            _size -= _fields[name].size();
+            std::size_t offset = _fields[name].offset;
+            std::size_t size = _fields[name].size();
+            // edit all the fields offsets after this one, that way
+            for (auto &field : _fields) {
+                if (field.second.offset > offset) {
+                    field.second.offset -= size;
+                }
+            }
+            _size -= size;
         }
         _fields[name] = DataField(_size, type);
         _size += _fields[name].size();
@@ -803,34 +807,6 @@ class CommunicationChannel {
     virtual std::vector<std::uint8_t> receive() = 0;
     virtual void send(const Message &message) = 0;
 };
-
-#ifdef RDSCOM_ARDUINO  // Arduino specific code
-#include <Arduino.h>
-
-class SerialCommunicationChannel : public CommunicationChannel {
-   public:
-    SerialCommunicationChannel(HardwareSerial &serial) : _serial(serial) {}
-
-    std::vector<std::uint8_t> receive() override {
-        std::vector<std::uint8_t> data;
-        while (_serial.available()) {
-            data.push_back(static_cast<std::uint8_t>(_serial.read()));
-        }
-        return data;
-    }
-
-    void send(const Message &message) override {
-        std::vector<std::uint8_t> serialized = message.serialize();
-        for (std::uint8_t byte : serialized) {
-            _serial.write(byte);
-        }
-    }
-
-   private:
-    HardwareSerial &_serial;
-};
-
-#endif
 
 class DummyChannel : public CommunicationChannel {
    public:
