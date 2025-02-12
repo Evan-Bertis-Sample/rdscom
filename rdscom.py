@@ -25,36 +25,67 @@ RDSCOM_DEBUG_ENABLED = True
 RDSCOM_COLOR_PURPLE = "\033[95m"
 RDSCOM_COLOR_RETURN = "\033[0m"
 
+
 def debug_print(fmt: str, *args: Any) -> None:
     if RDSCOM_DEBUG_ENABLED:
-        sys.stdout.write(RDSCOM_COLOR_PURPLE + ("[rdscom.py:%d] " % sys._getframe(1).f_lineno) + RDSCOM_COLOR_RETURN + (fmt % args))
+        sys.stdout.write(
+            RDSCOM_COLOR_PURPLE
+            + ("[rdscom.py:%d] " % sys._getframe(1).f_lineno)
+            + RDSCOM_COLOR_RETURN
+            + (fmt % args)
+        )
         sys.stdout.flush()
+
 
 def debug_println(fmt: str, *args: Any) -> None:
     if RDSCOM_DEBUG_ENABLED:
-        sys.stdout.write(RDSCOM_COLOR_PURPLE + ("[rdscom.py:%d] " % sys._getframe(1).f_lineno) + RDSCOM_COLOR_RETURN + (fmt % args) + "\n")
+        sys.stdout.write(
+            RDSCOM_COLOR_PURPLE
+            + ("[rdscom.py:%d] " % sys._getframe(1).f_lineno)
+            + RDSCOM_COLOR_RETURN
+            + (fmt % args)
+            + "\n"
+        )
         sys.stdout.flush()
+
 
 def debug_print_error(fmt: str, *args: Any) -> None:
     if RDSCOM_DEBUG_ENABLED:
-        sys.stderr.write(RDSCOM_COLOR_PURPLE + ("[rdscom.py:%d] " % sys._getframe(1).f_lineno) + RDSCOM_COLOR_RETURN + (fmt % args))
+        sys.stderr.write(
+            RDSCOM_COLOR_PURPLE
+            + ("[rdscom.py:%d] " % sys._getframe(1).f_lineno)
+            + RDSCOM_COLOR_RETURN
+            + (fmt % args)
+        )
         sys.stderr.flush()
+
 
 def debug_print_errorln(fmt: str, *args: Any) -> None:
     if RDSCOM_DEBUG_ENABLED:
-        sys.stderr.write(RDSCOM_COLOR_PURPLE + ("[rdscom.py:%d] " % sys._getframe(1).f_lineno) + RDSCOM_COLOR_RETURN + (fmt % args) + "\n")
+        sys.stderr.write(
+            RDSCOM_COLOR_PURPLE
+            + ("[rdscom.py:%d] " % sys._getframe(1).f_lineno)
+            + RDSCOM_COLOR_RETURN
+            + (fmt % args)
+            + "\n"
+        )
         sys.stderr.flush()
+
 
 def default_error_callback(stream=sys.stdout) -> Callable[[str], None]:
     return lambda error: stream.write("Error: " + error + "\n")
 
+
 # ---------------------------------------------------------------------------
 #                           RESULT CLASS & UTILITY FUNCTION
 # ---------------------------------------------------------------------------
-T = TypeVar('T')
+T = TypeVar("T")
+
 
 class Result(Generic[T]):
-    def __init__(self, value: Optional[T] = None, error: bool = False, error_message: str = ""):
+    def __init__(
+        self, value: Optional[T] = None, error: bool = False, error_message: str = ""
+    ):
         self._value = value
         self._error = error
         self._error_message = error_message
@@ -98,24 +129,27 @@ class Result(Generic[T]):
             on_error(error_message)
         return error
 
+
 # ---------------------------------------------------------------------------
 #                           DATA FIELDS & PROTOTYPES
 # ---------------------------------------------------------------------------
 
+
 class DataFieldType(enum.Enum):
-    UINT8   = 0
-    UINT16  = 1
-    UINT32  = 2
-    UINT64  = 3
-    INT8    = 4
-    INT16   = 5
-    INT32   = 6
-    INT64   = 7
-    FLOAT   = 8
-    DOUBLE  = 9
-    BOOL    = 10
-    BYTE    = 11
-    NONE    = 12
+    UINT8 = 0
+    UINT16 = 1
+    UINT32 = 2
+    UINT64 = 3
+    INT8 = 4
+    INT16 = 5
+    INT32 = 6
+    INT64 = 7
+    FLOAT = 8
+    DOUBLE = 9
+    BOOL = 10
+    BYTE = 11
+    NONE = 12
+
 
 class DataField:
     def __init__(self, offset: int = 0, type_: DataFieldType = DataFieldType.NONE):
@@ -124,7 +158,12 @@ class DataField:
 
     @classmethod
     def get_size_of_type(cls, type_: DataFieldType) -> int:
-        if type_ in (DataFieldType.UINT8, DataFieldType.INT8, DataFieldType.BOOL, DataFieldType.BYTE):
+        if type_ in (
+            DataFieldType.UINT8,
+            DataFieldType.INT8,
+            DataFieldType.BOOL,
+            DataFieldType.BYTE,
+        ):
             return 1
         elif type_ in (DataFieldType.UINT16, DataFieldType.INT16):
             return 2
@@ -146,8 +185,10 @@ class DataField:
     def __ne__(self, other: object) -> bool:
         return not (self == other)
 
+
 # Reserved identifier for error prototypes
 RESERVED_ERROR_PROTOTYPE = 80
+
 
 class DataPrototype:
     def __init__(self, identifier: int = RESERVED_ERROR_PROTOTYPE):
@@ -170,7 +211,7 @@ class DataPrototype:
             offset += 1
             if offset + name_size + 1 > len(serialized):
                 return Result.errorResult("Serialized data too short")
-            name_bytes = serialized[offset:offset+name_size]
+            name_bytes = serialized[offset : offset + name_size]
             try:
                 name = name_bytes.decode("utf-8")
             except UnicodeDecodeError:
@@ -218,6 +259,7 @@ class DataPrototype:
     def __repr__(self) -> str:
         return f"DataPrototype(identifier={self._identifier}, size={self._size}, fields={self._fields})"
 
+
 # Mapping from DataFieldType to struct format characters
 _type_format: Dict[DataFieldType, str] = {
     DataFieldType.UINT8: "B",
@@ -234,6 +276,7 @@ _type_format: Dict[DataFieldType, str] = {
     DataFieldType.DOUBLE: "d",
 }
 
+
 class DataBuffer:
     def __init__(self, proto: Optional[DataPrototype] = None):
         if proto is None:
@@ -245,11 +288,15 @@ class DataBuffer:
             self._data = bytearray(proto.size())
 
     @classmethod
-    def create_from_prototype(cls, proto: DataPrototype, data: bytes) -> Result["DataBuffer"]:
+    def create_from_prototype(
+        cls, proto: DataPrototype, data: bytes
+    ) -> Result["DataBuffer"]:
         if proto.identifier() == RESERVED_ERROR_PROTOTYPE:
             return Result.errorResult("Invalid prototype: " + str(proto.identifier()))
         if len(data) != proto.size():
-            return Result.errorResult(f"Data size mismatch, expected: {proto.size()}, got: {len(data)}")
+            return Result.errorResult(
+                f"Data size mismatch, expected: {proto.size()}, got: {len(data)}"
+            )
         buffer = cls(proto)
         buffer._data = bytearray(data)
         return Result.ok(buffer)
@@ -293,7 +340,7 @@ class DataBuffer:
         except struct.error as e:
             return Result.errorResult("Struct pack error: " + str(e))
         # Copy the packed bytes into the data buffer.
-        self._data[field.offset:field.offset+expected_size] = packed
+        self._data[field.offset : field.offset + expected_size] = packed
         return Result.ok(value)
 
     def data(self) -> bytearray:
@@ -308,20 +355,28 @@ class DataBuffer:
     def __repr__(self) -> str:
         return f"DataBuffer(type={self._type}, data={list(self._data)})"
 
+
 # ---------------------------------------------------------------------------
 #                           MESSAGES
 # ---------------------------------------------------------------------------
 
+
 class MessageType(enum.IntEnum):
-    REQUEST  = 0
+    REQUEST = 0
     RESPONSE = 1
-    ERROR    = 2
+    ERROR = 2
+
 
 class MessageHeader:
-    def __init__(self, type_: MessageType = MessageType.REQUEST, prototype_handle: int = 0, message_number: int = 0):
+    def __init__(
+        self,
+        type_: MessageType = MessageType.REQUEST,
+        prototype_handle: int = 0,
+        message_number: int = 0,
+    ):
         self.type = type_
         self.prototype_handle = prototype_handle  # 0-255
-        self.message_number = message_number      # 0-65535
+        self.message_number = message_number  # 0-65535
 
     @classmethod
     def from_serialized(cls, serialized: bytes) -> Result["MessageHeader"]:
@@ -342,6 +397,7 @@ class MessageHeader:
     def __repr__(self) -> str:
         return f"MessageHeader(type={self.type}, prototype_handle={self.prototype_handle}, message_number={self.message_number})"
 
+
 class Message:
     # Static members
     _preamble: bytes = b"RDS"  # 3 bytes
@@ -356,7 +412,9 @@ class Message:
         self._header = header
         self._buffer = buffer
         # Serve warnings if needed.
-        self._serve_message_constructor_warnings(self._buffer.type().identifier(), self._header.type)
+        self._serve_message_constructor_warnings(
+            self._buffer.type().identifier(), self._header.type
+        )
 
     @classmethod
     def _next_message_number(cls) -> int:
@@ -364,14 +422,24 @@ class Message:
         return cls._message_number
 
     @classmethod
-    def from_type_and_data(cls, msg_type: MessageType, data: DataBuffer, message_number: Optional[int] = None) -> "Message":
+    def from_type_and_data(
+        cls,
+        msg_type: MessageType,
+        data: DataBuffer,
+        message_number: Optional[int] = None,
+    ) -> "Message":
         if message_number is None:
             message_number = cls._next_message_number()
         header = MessageHeader(msg_type, data.type().identifier(), message_number)
         return cls(header, data)
 
     @classmethod
-    def from_type_and_proto(cls, msg_type: MessageType, proto: DataPrototype, message_number: Optional[int] = None) -> "Message":
+    def from_type_and_proto(
+        cls,
+        msg_type: MessageType,
+        proto: DataPrototype,
+        message_number: Optional[int] = None,
+    ) -> "Message":
         if message_number is None:
             message_number = cls._next_message_number()
         header = MessageHeader(msg_type, proto.identifier(), message_number)
@@ -380,7 +448,9 @@ class Message:
 
     @classmethod
     def create_response(cls, request: "Message", data: DataBuffer) -> "Message":
-        header = MessageHeader(MessageType.RESPONSE, data.type().identifier(), request.message_number())
+        header = MessageHeader(
+            MessageType.RESPONSE, data.type().identifier(), request.message_number()
+        )
         return cls(header, data)
 
     @classmethod
@@ -391,16 +461,18 @@ class Message:
         return serialized[cls._preamble_size + 1]
 
     @classmethod
-    def from_serialized(cls, proto: DataPrototype, serialized: bytes) -> Result["Message"]:
+    def from_serialized(
+        cls, proto: DataPrototype, serialized: bytes
+    ) -> Result["Message"]:
         if proto.identifier() == RESERVED_ERROR_PROTOTYPE:
             return Result.errorResult("Invalid prototype")
         if len(serialized) <= cls._preamble_size:
             return Result.errorResult("Message too short: " + str(len(serialized)))
         # Check preamble
-        if serialized[0:cls._preamble_size] != cls._preamble:
+        if serialized[0 : cls._preamble_size] != cls._preamble:
             return Result.errorResult("Invalid preamble")
         # Check end sequence
-        if serialized[-cls._end_sequence_size:] != cls._end_sequence:
+        if serialized[-cls._end_sequence_size :] != cls._end_sequence:
             return Result.errorResult("Invalid end sequence")
         # Extract header bytes
         header_bytes = serialized[cls._preamble_size : cls._preamble_size + 4]
@@ -408,10 +480,16 @@ class Message:
         if header_res.is_error():
             return Result.errorResult("Failed to create message header")
         header = header_res.value()
-        expected_size = cls._complete_header_size + proto.size() + cls._complete_end_sequence_size
+        expected_size = (
+            cls._complete_header_size + proto.size() + cls._complete_end_sequence_size
+        )
         if len(serialized) != expected_size:
-            return Result.errorResult(f"Message size mismatch, expected: {expected_size}, got: {len(serialized)}")
-        data_bytes = serialized[cls._complete_header_size : -cls._complete_end_sequence_size]
+            return Result.errorResult(
+                f"Message size mismatch, expected: {expected_size}, got: {len(serialized)}"
+            )
+        data_bytes = serialized[
+            cls._complete_header_size : -cls._complete_end_sequence_size
+        ]
         buffer_res = DataBuffer.create_from_prototype(proto, data_bytes)
         if buffer_res.is_error():
             return Result.errorResult("Failed to create data buffer")
@@ -443,29 +521,49 @@ class Message:
     def print_clean(self, output=sys.stdout) -> None:
         serialized = self.serialize()
         output.write("Message: \n")
-        output.write("  Preamble: " + serialized[0:Message._preamble_size].decode("utf-8", errors="replace") + "\n")
-        header_bytes = serialized[Message._preamble_size:Message._complete_header_size]
+        output.write(
+            "  Preamble: "
+            + serialized[0 : Message._preamble_size].decode("utf-8", errors="replace")
+            + "\n"
+        )
+        header_bytes = serialized[
+            Message._preamble_size : Message._complete_header_size
+        ]
         header_hex = " ".join(f"{b:02x}" for b in header_bytes)
         output.write("  Header: " + header_hex + "\n")
-        data_bytes = serialized[Message._complete_header_size : Message._complete_header_size + self._buffer.size()]
+        data_bytes = serialized[
+            Message._complete_header_size : Message._complete_header_size
+            + self._buffer.size()
+        ]
         data_hex = " ".join(f"{b:02x}" for b in data_bytes)
         output.write("  Data: " + data_hex + "\n")
-        end_seq = serialized[-Message._end_sequence_size:].decode("utf-8", errors="replace")
+        end_seq = serialized[-Message._end_sequence_size :].decode(
+            "utf-8", errors="replace"
+        )
         output.write("  End Sequence: " + end_seq + "\n")
 
-    def _serve_message_constructor_warnings(self, prototype_identifier: int, msg_type: MessageType) -> None:
+    def _serve_message_constructor_warnings(
+        self, prototype_identifier: int, msg_type: MessageType
+    ) -> None:
         if prototype_identifier == RESERVED_ERROR_PROTOTYPE:
-            debug_print_errorln("Invalid prototype: please make sure to pass in a number to the DataPrototype constructor and do not use the identifier %d", RESERVED_ERROR_PROTOTYPE)
+            debug_print_errorln(
+                "Invalid prototype: please make sure to pass in a number to the DataPrototype constructor and do not use the identifier %d",
+                RESERVED_ERROR_PROTOTYPE,
+            )
         if msg_type == MessageType.RESPONSE:
-            debug_print_errorln("Creating a response message directly is not recommended. Please use Message.create_response() instead.")
+            debug_print_errorln(
+                "Creating a response message directly is not recommended. Please use Message.create_response() instead."
+            )
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, Message):
             return NotImplemented
-        return (self._header.type == other._header.type and
-                self._header.prototype_handle == other._header.prototype_handle and
-                self._header.message_number == other._header.message_number and
-                self._buffer.data() == other._buffer.data())
+        return (
+            self._header.type == other._header.type
+            and self._header.prototype_handle == other._header.prototype_handle
+            and self._header.message_number == other._header.message_number
+            and self._buffer.data() == other._buffer.data()
+        )
 
     def __ne__(self, other: object) -> bool:
         return not (self == other)
@@ -473,11 +571,13 @@ class Message:
     def __repr__(self) -> str:
         return f"Message(header={self._header}, buffer={self._buffer})"
 
+
 # ---------------------------------------------------------------------------
 #                    COMMUNICATION CHANNELS
 # ---------------------------------------------------------------------------
 
 from abc import ABC, abstractmethod
+
 
 class CommunicationChannel(ABC):
     @abstractmethod
@@ -487,6 +587,7 @@ class CommunicationChannel(ABC):
     @abstractmethod
     def send(self, message: Message) -> None:
         pass
+
 
 # DummyChannel implementation for testing
 class DummyChannel(CommunicationChannel):
@@ -505,6 +606,7 @@ class DummyChannel(CommunicationChannel):
         serialized = message.serialize()
         self._data.extend(serialized)
 
+
 # (If you were on Arduino you would create a SerialCommunicationChannel here.)
 
 # ---------------------------------------------------------------------------
@@ -514,19 +616,25 @@ class DummyChannel(CommunicationChannel):
 CallBackList = List[Callable[[Message], None]]
 CallBackMap = Dict[int, CallBackList]
 
+
 class CommunicationInterfaceOptions:
-    def __init__(self,
-                 max_retries: int = 3,
-                 retry_timeout: int = 1000,
-                 time_function: Optional[Callable[[], int]] = None):
+    def __init__(
+        self,
+        max_retries: int = 3,
+        retry_timeout: int = 1000,
+        time_function: Optional[Callable[[], int]] = None,
+    ):
         self.max_retries = max_retries
         self.retry_timeout = retry_timeout
         if time_function is None:
             # Default time function: milliseconds since epoch.
             self.time_function = lambda: int(time.time() * 1000)
-            debug_print_errorln("No time function set for CommunicationInterfaceOptions, using default time.time() based function")
+            debug_print_errorln(
+                "No time function set for CommunicationInterfaceOptions, using default time.time() based function"
+            )
         else:
             self.time_function = time_function
+
 
 class CommunicationInterface:
     class SentMessage:
@@ -535,9 +643,15 @@ class CommunicationInterface:
             self.time_sent = time_sent
             self.num_retries = num_retries
 
-    def __init__(self, channel: CommunicationChannel, options: Optional[CommunicationInterfaceOptions] = None):
+    def __init__(
+        self,
+        channel: CommunicationChannel,
+        options: Optional[CommunicationInterfaceOptions] = None,
+    ):
         self._channel = channel
-        self._options = options if options is not None else CommunicationInterfaceOptions()
+        self._options = (
+            options if options is not None else CommunicationInterfaceOptions()
+        )
         self._rx_callbacks: CallBackMap = {}
         self._tx_callbacks: CallBackMap = {}
         self._err_callbacks: CallBackMap = {}
@@ -545,7 +659,9 @@ class CommunicationInterface:
         self._acks_needed: Dict[int, CommunicationInterface.SentMessage] = {}
         self._last_message_time: int = 0
 
-    def add_callback(self, type_: int, msg_type: MessageType, callback: Callable[[Message], None]) -> "CommunicationInterface":
+    def add_callback(
+        self, type_: int, msg_type: MessageType, callback: Callable[[Message], None]
+    ) -> "CommunicationInterface":
         callback_map = self._get_map(msg_type)
         if type_ not in callback_map:
             callback_map[type_] = []
@@ -555,7 +671,10 @@ class CommunicationInterface:
     def add_prototype(self, proto: DataPrototype) -> "CommunicationInterface":
         handle = proto.identifier()
         if handle == RESERVED_ERROR_PROTOTYPE:
-            debug_print_errorln("Invalid prototype: please make sure to pass in a number to the DataPrototype constructor and do not use the identifier %d", RESERVED_ERROR_PROTOTYPE)
+            debug_print_errorln(
+                "Invalid prototype: please make sure to pass in a number to the DataPrototype constructor and do not use the identifier %d",
+                RESERVED_ERROR_PROTOTYPE,
+            )
             return self
         self._prototypes[handle] = proto
         return self
@@ -569,14 +688,21 @@ class CommunicationInterface:
             time_since_sent = current_time - sent_msg.time_sent
             if time_since_sent > self._options.retry_timeout:
                 if sent_msg.num_retries < self._options.max_retries:
-                    debug_println("Retrying message number %d after %d ms", message_number, time_since_sent)
+                    debug_println(
+                        "Retrying message number %d after %d ms",
+                        message_number,
+                        time_since_sent,
+                    )
                     self.send_message(sent_msg.message, ack_required=False)
                     sent_msg.time_sent = self._options.time_function()
                     sent_msg.num_retries += 1
                 else:
                     to_remove.append(message_number)
         for message_number in to_remove:
-            debug_println("Removing message number %d -- failed to get an ack before the timeout", message_number)
+            debug_println(
+                "Removing message number %d -- failed to get an ack before the timeout",
+                message_number,
+            )
             del self._acks_needed[message_number]
 
     def listen(self) -> None:
@@ -585,16 +711,24 @@ class CommunicationInterface:
             return
         proto_handle = Message.get_prototype_handle_from_buffer(data)
         if proto_handle not in self._prototypes:
-            debug_print_errorln("No prototype found for message with handle %d", proto_handle)
+            debug_print_errorln(
+                "No prototype found for message with handle %d", proto_handle
+            )
             return
         proto = self._prototypes[proto_handle]
         message_res = Message.from_serialized(proto, data)
         if message_res.is_error():
-            debug_print_errorln("Failed to deserialize message: %s", message_res.error())
+            debug_print_errorln(
+                "Failed to deserialize message: %s", message_res.error()
+            )
             return
         message = message_res.value()
-        debug_println("Received message of prototype %d, message number %d, message type %d",
-                      proto_handle, message.message_number(), message.type())
+        debug_println(
+            "Received message of prototype %d, message number %d, message type %d",
+            proto_handle,
+            message.message_number(),
+            message.type(),
+        )
         self._last_message_time = self._options.time_function()
         if message.type() == MessageType.RESPONSE:
             if message.message_number() in self._acks_needed:
@@ -607,10 +741,15 @@ class CommunicationInterface:
     def send_message(self, message: Message, ack_required: bool = False) -> None:
         self._channel.send(message)
         if ack_required and message.type() == MessageType.REQUEST:
-            self._acks_needed[message.message_number()] = CommunicationInterface.SentMessage(
-                message, self._options.time_function(), 0)
+            self._acks_needed[message.message_number()] = (
+                CommunicationInterface.SentMessage(
+                    message, self._options.time_function(), 0
+                )
+            )
         elif ack_required and message.type() == MessageType.RESPONSE:
-            debug_print_errorln("You cannot require an ack for a response message, as a response is the ack")
+            debug_print_errorln(
+                "You cannot require an ack for a response message, as a response is the ack"
+            )
 
     def get_prototype(self, identifier: int) -> Result[DataPrototype]:
         if identifier not in self._prototypes:
@@ -628,53 +767,3 @@ class CommunicationInterface:
         elif msg_type == MessageType.ERROR:
             return self._err_callbacks
         return self._rx_callbacks
-
-# ---------------------------------------------------------------------------
-# Example usage (for testing purposes)
-# ---------------------------------------------------------------------------
-if __name__ == "__main__":
-    # Create a simple prototype with two fields.
-    proto = DataPrototype(1)
-    proto.add_field("value", DataFieldType.UINT16)
-    proto.add_field("flag", DataFieldType.BOOL)
-
-    # Create a DataBuffer from the prototype.
-    buffer = DataBuffer(proto)
-    res1 = buffer.set_field("value", 12345)
-    res2 = buffer.set_field("flag", True)
-    if res1.is_error() or res2.is_error():
-        debug_print_errorln("Failed to set field: %s %s", res1.error(), res2.error())
-
-    # Create a message.
-    msg = Message.from_type_and_data(MessageType.REQUEST, buffer)
-    serialized = msg.serialize()
-    debug_println("Serialized message: %s", " ".join(f"{b:02x}" for b in serialized))
-
-    # Deserialize the message.
-    msg_res = Message.from_serialized(proto, serialized)
-    if msg_res.is_error():
-        debug_print_errorln("Deserialization error: %s", msg_res.error())
-    else:
-        msg2 = msg_res.value()
-        val_res = msg2.get_field("value")
-        flag_res = msg2.get_field("flag")
-        if not val_res.is_error() and not flag_res.is_error():
-            debug_println("Deserialized fields: value=%s, flag=%s", val_res.value(), flag_res.value())
-        else:
-            debug_print_errorln("Error reading fields: %s %s", val_res.error(), flag_res.error())
-
-    # Set up a dummy communication channel and interface.
-    channel = DummyChannel()
-    comm = CommunicationInterface(channel)
-    comm.add_prototype(proto)
-
-    # Register a simple callback for REQUEST messages with prototype handle 1.
-    def handle_request(message: Message) -> None:
-        debug_println("Callback: Received message number %d", message.message_number())
-    comm.add_callback(1, MessageType.REQUEST, handle_request)
-
-    # Send the message (with ack_required False for now).
-    comm.send_message(msg, ack_required=False)
-
-    # Call tick() to have the interface process received messages.
-    comm.tick()
