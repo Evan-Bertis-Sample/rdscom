@@ -255,6 +255,9 @@ class DataPrototype:
 
     def identifier(self) -> int:
         return self._identifier
+    
+    def field_names(self) -> List[str]:
+        return list(self._fields.keys())
 
     def __repr__(self) -> str:
         return f"DataPrototype(identifier={self._identifier}, size={self._size}, fields={self._fields})"
@@ -366,6 +369,26 @@ class MessageType(enum.IntEnum):
     RESPONSE = 1
     ERROR = 2
 
+    @staticmethod
+    def to_string(type_: "MessageType") -> str:
+        if type_ == MessageType.REQUEST:
+            return "Request"
+        elif type_ == MessageType.RESPONSE:
+            return "Response"
+        elif type_ == MessageType.ERROR:
+            return "Error"
+        return "Unknown"
+    
+    @staticmethod
+    def from_string(type_str: str) -> "MessageType":
+        if type_str == "Request":
+            return MessageType.REQUEST
+        elif type_str == "Response":
+            return MessageType.RESPONSE
+        elif type_str == "Error":
+            return MessageType.ERROR
+        return MessageType.REQUEST
+
 
 class MessageHeader:
     def __init__(
@@ -400,7 +423,7 @@ class MessageHeader:
 
 class Message:
     # Static members
-    _preamble: bytes = b"RDS"  # 3 bytes
+    _preamble: bytes = b"RRR"  # 3 bytes
     _preamble_size: int = len(_preamble)
     _end_sequence: bytes = b"END"  # 3 bytes
     _end_sequence_size: int = len(_end_sequence)
@@ -746,10 +769,21 @@ class CommunicationInterface:
                     message, self._options.time_function(), 0
                 )
             )
+
+            # call the tx callbacks, if this is the first time the message is being sent
+            acks_needed = self._acks_needed[message.message_number()]
+            if acks_needed.num_retries == 0:
+                callback_map = self._get_map(message.type())
+                if message.data().type().identifier() in callback_map:
+                    print("Calling tx callbacks")
+                    for callback in callback_map[message.data().type().identifier()]:
+                        callback(message)
         elif ack_required and message.type() == MessageType.RESPONSE:
             debug_print_errorln(
                 "You cannot require an ack for a response message, as a response is the ack"
             )
+
+        # call the tx callbacks
 
     def get_prototype(self, identifier: int) -> Result[DataPrototype]:
         if identifier not in self._prototypes:
