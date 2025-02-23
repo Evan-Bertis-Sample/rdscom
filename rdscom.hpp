@@ -109,7 +109,7 @@ bool check(OnError onError, Fs &&...functions) {
     return false;
 }
 
-std::function<void(const char *)> defaultErrorCallback(std::ostream &stream) {
+inline std::function<void(const char *)> defaultErrorCallback(std::ostream &stream) {
     return [&stream](const char *error) { stream << "Error: " << error << std::endl; };
 }
 
@@ -707,6 +707,8 @@ class Message {
     /// @return The DataBuffer in the message
     DataBuffer &data() { return _buffer; }
 
+    DataBuffer data() const { return _buffer; }
+
     /// @brief Returns a const reference to the DataBuffer in the message
     /// @return The DataBuffer in the message
     std::uint16_t messageNumber() const { return _header.messageNumber; }
@@ -783,13 +785,13 @@ class Message {
     }
 };
 
-std::uint8_t Message::_preamble[3] = {(std::uint8_t)'R', (std::uint8_t)'D', (std::uint8_t)'S'};
-std::size_t Message::_preambleSize = 3;
-std::size_t Message::_completeHeaderSize = Message::_preambleSize + sizeof(MessageHeader);
-std::uint16_t Message::_messageNumber = 0;
-std::uint8_t Message::_endSequence[3] = {(std::uint8_t)'E', (std::uint8_t)'N', (std::uint8_t)'D'};
-std::size_t Message::_endSequenceSize = 3;
-std::size_t Message::_completeEndSequenceSize = Message::_endSequenceSize;
+inline std::uint8_t Message::_preamble[3] = {(std::uint8_t)'R', (std::uint8_t)'R', (std::uint8_t)'R'};
+inline std::size_t Message::_preambleSize = 3;
+inline std::size_t Message::_completeHeaderSize = Message::_preambleSize + sizeof(MessageHeader);
+inline std::uint16_t Message::_messageNumber = 0;
+inline std::uint8_t Message::_endSequence[3] = {(std::uint8_t)'E', (std::uint8_t)'N', (std::uint8_t)'D'};
+inline std::size_t Message::_endSequenceSize = 3;
+inline std::size_t Message::_completeEndSequenceSize = Message::_endSequenceSize;
 
 /**========================================================================
  *                       COMMUNICATION CHANNELS
