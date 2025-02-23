@@ -681,6 +681,7 @@ class CommunicationInterface:
         self._prototypes: Dict[int, DataPrototype] = {}
         self._acks_needed: Dict[int, CommunicationInterface.SentMessage] = {}
         self._last_message_time: int = 0
+        self._on_failure_callbacks : CallBackMap = {} # for when messages fail to send
 
     def add_callback(
         self, type_: int, msg_type: MessageType, callback: Callable[[Message], None]
@@ -726,6 +727,11 @@ class CommunicationInterface:
                 "Removing message number %d -- failed to get an ack before the timeout",
                 message_number,
             )
+
+            # call the on_failure callback
+            if message_number in self._on_failure_callbacks.keys():
+                self._on_failure_callbacks[message_number]()
+
             del self._acks_needed[message_number]
 
     def listen(self) -> None:
@@ -761,7 +767,7 @@ class CommunicationInterface:
             for callback in callback_map[proto_handle]:
                 callback(message)
 
-    def send_message(self, message: Message, ack_required: bool = False) -> None:
+    def send_message(self, message: Message, ack_required: bool = False, on_failure : callable = None) -> None:
         self._channel.send(message)
         if ack_required and message.type() == MessageType.REQUEST:
             self._acks_needed[message.message_number()] = (
@@ -778,6 +784,9 @@ class CommunicationInterface:
                     print("Calling tx callbacks")
                     for callback in callback_map[message.data().type().identifier()]:
                         callback(message)
+
+                # also add the on_failure callback
+                self._on_failure_callbacks[message.message_number()] = on_failure
         elif ack_required and message.type() == MessageType.RESPONSE:
             debug_print_errorln(
                 "You cannot require an ack for a response message, as a response is the ack"
