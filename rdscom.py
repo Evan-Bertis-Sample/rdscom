@@ -19,7 +19,7 @@ from typing import Any, Callable, Dict, List, Optional, TypeVar, Generic
 #                           VERSION & DEBUG SETTINGS
 # ---------------------------------------------------------------------------
 RDSCOM_VERSION = "0.1.0"
-RDSCOM_DEBUG_ENABLED = True
+RDSCOM_DEBUG_ENABLED = False
 
 # ANSI color codes for debugging (if enabled)
 RDSCOM_COLOR_PURPLE = "\033[95m"
