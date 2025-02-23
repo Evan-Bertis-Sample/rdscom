@@ -785,7 +785,7 @@ class Message {
     }
 };
 
-inline std::uint8_t Message::_preamble[3] = {(std::uint8_t)'R', (std::uint8_t)'D', (std::uint8_t)'S'};
+inline std::uint8_t Message::_preamble[3] = {(std::uint8_t)'R', (std::uint8_t)'R', (std::uint8_t)'R'};
 inline std::size_t Message::_preambleSize = 3;
 inline std::size_t Message::_completeHeaderSize = Message::_preambleSize + sizeof(MessageHeader);
 inline std::uint16_t Message::_messageNumber = 0;
