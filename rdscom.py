@@ -19,7 +19,7 @@ from typing import Any, Callable, Dict, List, Optional, TypeVar, Generic
 #                           VERSION & DEBUG SETTINGS
 # ---------------------------------------------------------------------------
 RDSCOM_VERSION = "0.1.0"
-RDSCOM_DEBUG_ENABLED = True
+RDSCOM_DEBUG_ENABLED = False
 
 # ANSI color codes for debugging (if enabled)
 RDSCOM_COLOR_PURPLE = "\033[95m"
@@ -766,11 +766,11 @@ class CommunicationInterface:
         # find the last END sequence
         last_end_sequence_start = data.rfind(Message._end_sequence)
         if last_end_sequence_start == -1:
-            # grab the last part of the data after the last END sequence
-            self._old_data = data[last_end_sequence_start + Message._end_sequence_size:]
-        else:
-            # there was no END sequence, so the old data is the whole data
+            # there was no END sequence, so the whole data is old data
             self._old_data = data
+        else:
+            # the old data is everything after the last END sequence
+            self._old_data = data[last_end_sequence_start + Message._end_sequence_size:]
         debug_println("Old data: %s", self._old_data)
 
             
@@ -804,8 +804,8 @@ class CommunicationInterface:
             if message.message_number() in self._acks_needed:
                 # call the on_success callback
                 if message.message_number() in self._on_success_callbacks.keys():
-                    for callback in self._on_success_callbacks[message.message_number()]:
-                        callback(message)
+                    self._on_success_callbacks[message.message_number()](message)
+
                 del self._acks_needed[message.message_number()]
         callback_map = self._get_map(message.type())
         if proto_handle in callback_map:
@@ -830,9 +830,11 @@ class CommunicationInterface:
                         callback(message)
 
                 # also add the on_failure callback
-                self._on_failure_callbacks[message.message_number()] = on_failure
+                if on_failure is not None:
+                    self._on_failure_callbacks[message.message_number()] = on_failure
                 # and the on_success callback
-                self._on_success_callbacks[message.message_number()] = [on_success]
+                if on_success is not None:
+                    self._on_success_callbacks[message.message_number()] = on_success
         elif ack_required and message.type() == MessageType.RESPONSE:
             debug_print_errorln(
                 "You cannot require an ack for a response message, as a response is the ack"
