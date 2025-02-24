@@ -19,7 +19,7 @@ from typing import Any, Callable, Dict, List, Optional, TypeVar, Generic
 #                           VERSION & DEBUG SETTINGS
 # ---------------------------------------------------------------------------
 RDSCOM_VERSION = "0.1.0"
-RDSCOM_DEBUG_ENABLED = False
+RDSCOM_DEBUG_ENABLED = True
 
 # ANSI color codes for debugging (if enabled)
 RDSCOM_COLOR_PURPLE = "\033[95m"
@@ -683,6 +683,7 @@ class CommunicationInterface:
         self._acks_needed: Dict[int, CommunicationInterface.SentMessage] = {}
         self._last_message_time: int = 0
         self._on_failure_callbacks : CallBackMap = {} # for when messages fail to send
+        self._on_success_callbacks : CallBackMap = {} # for when messages are successfully sent
 
     def add_callback(
         self, type_: int, msg_type: MessageType, callback: Callable[[Message], None]
@@ -739,6 +740,27 @@ class CommunicationInterface:
         data = self._channel.receive()
         if not data:
             return
+        
+        # find all of the parts of the message that start with the preamble
+        preamble_start = 0
+        while preamble_start < len(data):
+            preamble_start = data.find(Message._preamble, preamble_start)
+            if preamble_start == -1:
+                break
+            # find the end of the message
+            end_sequence_start = data.find(Message._end_sequence, preamble_start)
+            if end_sequence_start == -1:
+                break
+            message_data = data[preamble_start : end_sequence_start + Message._end_sequence_size]
+            preamble_start = end_sequence_start + Message._end_sequence_size
+            self._handle_message(message_data)
+
+
+    def _handle_message(self, data: bytes) -> None:
+        # print out the data
+        debug_println("Received data of size %d", len(data))
+        debug_println("Data: %s", data)
+    
         proto_handle = Message.get_prototype_handle_from_buffer(data)
         if proto_handle not in self._prototypes:
             debug_print_errorln(
@@ -762,13 +784,17 @@ class CommunicationInterface:
         self._last_message_time = self._options.time_function()
         if message.type() == MessageType.RESPONSE:
             if message.message_number() in self._acks_needed:
+                # call the on_success callback
+                if message.message_number() in self._on_success_callbacks.keys():
+                    for callback in self._on_success_callbacks[message.message_number()]:
+                        callback(message)
                 del self._acks_needed[message.message_number()]
         callback_map = self._get_map(message.type())
         if proto_handle in callback_map:
             for callback in callback_map[proto_handle]:
                 callback(message)
 
-    def send_message(self, message: Message, ack_required: bool = False, on_failure : callable = None) -> None:
+    def send_message(self, message: Message, ack_required: bool = False, on_failure : callable = None, on_success : callable = None) -> None:
         self._channel.send(message)
         if ack_required and message.type() == MessageType.REQUEST:
             self._acks_needed[message.message_number()] = (
