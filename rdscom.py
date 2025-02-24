@@ -684,6 +684,7 @@ class CommunicationInterface:
         self._last_message_time: int = 0
         self._on_failure_callbacks : CallBackMap = {} # for when messages fail to send
         self._on_success_callbacks : CallBackMap = {} # for when messages are successfully sent
+        self._old_data = b""
 
     def add_callback(
         self, type_: int, msg_type: MessageType, callback: Callable[[Message], None]
@@ -741,6 +742,13 @@ class CommunicationInterface:
         if not data:
             return
         
+        if len(self._old_data) > 0:
+            debug_println("Old data: %s", self._old_data)
+            debug_println("New data: %s", data)
+
+        # append the old data to the new data
+        data = self._old_data + data
+        
         # find all of the parts of the message that start with the preamble
         preamble_start = 0
         while preamble_start < len(data):
@@ -755,7 +763,17 @@ class CommunicationInterface:
             preamble_start = end_sequence_start + Message._end_sequence_size
             self._handle_message(message_data)
 
+        # find the last END sequence
+        last_end_sequence_start = data.rfind(Message._end_sequence)
+        if last_end_sequence_start == -1:
+            # grab the last part of the data after the last END sequence
+            self._old_data = data[last_end_sequence_start + Message._end_sequence_size:]
+        else:
+            # there was no END sequence, so the old data is the whole data
+            self._old_data = data
+        debug_println("Old data: %s", self._old_data)
 
+            
     def _handle_message(self, data: bytes) -> None:
         # print out the data
         debug_println("Received data of size %d", len(data))
@@ -813,6 +831,8 @@ class CommunicationInterface:
 
                 # also add the on_failure callback
                 self._on_failure_callbacks[message.message_number()] = on_failure
+                # and the on_success callback
+                self._on_success_callbacks[message.message_number()] = [on_success]
         elif ack_required and message.type() == MessageType.RESPONSE:
             debug_print_errorln(
                 "You cannot require an ack for a response message, as a response is the ack"
